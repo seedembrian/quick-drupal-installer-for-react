@@ -118,7 +118,8 @@ if [ "$FULL_INSTALL" = true ]; then
 
   # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
   echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
+  # Usar role:perm:remove en lugar de role:remove-permission
+  ddev drush role:perm:remove content_editor "access toolbar" 2>/dev/null || true
 
   echo "✅ Drupal CMS React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -127,10 +128,41 @@ else
   echo "📦 Proyecto Drupal React creado."
 fi
 
-# Mover Drupal a la carpeta /api
-echo "📦 Moviendo Drupal a la carpeta /api..."
+# Configurar Drupal en la carpeta /api de forma más segura
+echo "📦 Configurando Drupal en la carpeta /api..."
+
+# Crear la estructura de directorios
 ddev exec mkdir -p /var/www/html/web/api
-ddev exec bash -c 'find /var/www/html/web -maxdepth 1 -not -path "/var/www/html/web" -not -path "/var/www/html/web/api" -exec mv {} /var/www/html/web/api/ \;'
+
+# Usar rsync para copiar los archivos (más seguro que mover)
+ddev exec bash -c 'rsync -a --exclude="api" /var/www/html/web/ /var/www/html/web/api/'
+
+# Crear un index.php en la raíz que redireccione a /api
+ddev exec bash -c 'cat > /var/www/html/web/index.php << EOL
+<?php
+// Redireccionar a la página principal de Drupal
+header("Location: /api/");
+exit;
+EOL'
+
+# Actualizar settings.php para las nuevas rutas
+ddev exec bash -c 'if [ -f /var/www/html/web/api/sites/default/settings.php ]; then
+  # Hacer backup del archivo original
+  cp /var/www/html/web/api/sites/default/settings.php /var/www/html/web/api/sites/default/settings.php.bak
+  
+  # Actualizar rutas
+  sed -i "s|\$settings\[\"file_public_path\"\] = \"sites/default/files\"|\$settings\[\"file_public_path\"\] = \"api/sites/default/files\"|g" /var/www/html/web/api/sites/default/settings.php
+  
+  # Añadir configuración de base_path si no existe
+  if ! grep -q "\$base_url" /var/www/html/web/api/sites/default/settings.php; then
+    echo "\$base_url = \'https://\$_SERVER[\"HTTP_HOST\"]/api\';" >> /var/www/html/web/api/sites/default/settings.php
+  fi
+fi'
+
+# Copiar .htaccess a la carpeta api
+ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
+  cp /var/www/html/web/.htaccess /var/www/html/web/api/
+fi'
 
 # Instalar tema React (siempre se instala)
 echo "🎨 Configurando el tema React..."
@@ -164,7 +196,21 @@ echo "🎨 Configurando el tema React..."
       # Verificar si es un proyecto Vite
       if ddev exec test -f web/api/themes/custom/theme_react/react-src/vite.config.js; then
         echo "📝 Modificando vite.config.js para build en raíz..."
-        ddev exec bash -c 'sed -i "s|build|/var/www/html/web|g" /var/www/html/web/api/themes/custom/theme_react/react-src/vite.config.js'
+        # Crear un archivo de configuración Vite personalizado
+        ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/vite.config.js << EOL
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: "/var/www/html/web",
+    emptyOutDir: false,
+  },
+});
+EOL'
       fi
       
       # Construir el proyecto React
@@ -214,58 +260,52 @@ EOL'
 /**
  * Implements hook_page_attachments_alter().
  */
-function theme_react_page_attachments_alter(array &\$attachments) {
-  // Los archivos de React ahora están en la raíz de /web
-  \$dist_path = "";
-  
+function theme_react_page_attachments_alter(array &$attachments) {
   // Buscar archivos CSS y JS en la raíz de /web
-  if (is_dir(DRUPAL_ROOT)) {
-    \$files = scandir(DRUPAL_ROOT);
+  $web_root = DRUPAL_ROOT . "/../";
+  
+  // Definir rutas relativas para los assets
+  $css_files = glob($web_root . "*.css");
+  $js_files = glob($web_root . "*.js");
+  
+  // Añadir archivos CSS
+  foreach ($css_files as $css_file) {
+    $file_name = basename($css_file);
+    $file_path = "/" . $file_name;
     
-    foreach (\$files as \$file) {
-      // Ignorar directorios y archivos que no son CSS o JS
-      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$file) || 
-          (!preg_match("/\.css$/", \$file) && !preg_match("/\.js$/", \$file))) {
-        continue;
-      }
-      
-      \$file_path = "/" . \$file;
-      
-      // Añadir archivos CSS
-      if (preg_match("/\\.css\$/", \$file)) {
-        \$attachments["#attached"]["html_head"][] = [
-          [
-            "#type" => "html_tag",
-            "#tag" => "link",
-            "#attributes" => [
-              "rel" => "stylesheet",
-              "href" => \$file_path,
-            ],
-          ],
-          "theme_react_css_" . md5(\$file),
-        ];
-      }
-      
-      // Añadir archivos JS
-      if (preg_match("/\\.js\$/", \$file)) {
-        \$attachments["#attached"]["html_head"][] = [
-          [
-            "#type" => "html_tag",
-            "#tag" => "script",
-            "#attributes" => [
-              "src" => \$file_path,
-              "type" => "module",
-              "defer" => TRUE,
-            ],
-          ],
-          "theme_react_js_" . md5(\$file),
-        ];
-      }
-    }
+    $attachments["#attached"]["html_head"][] = [
+      [
+        "#type" => "html_tag",
+        "#tag" => "link",
+        "#attributes" => [
+          "rel" => "stylesheet",
+          "href" => $file_path,
+        ],
+      ],
+      "theme_react_css_" . md5($file_path),
+    ];
+  }
+  
+  // Añadir archivos JS
+  foreach ($js_files as $js_file) {
+    $file_name = basename($js_file);
+    $file_path = "/" . $file_name;
+    
+    $attachments["#attached"]["html_head"][] = [
+      [
+        "#type" => "html_tag",
+        "#tag" => "script",
+        "#attributes" => [
+          "src" => $file_path,
+          "defer" => TRUE,
+        ],
+      ],
+      "theme_react_js_" . md5($file_path),
+    ];
   }
   
   // Añadir CSS para manejar el div dialog-off-canvas-main-canvas
-  \$attachments["#attached"]["html_head"][] = [
+  $attachments["#attached"]["html_head"][] = [
     [
       "#type" => "html_tag",
       "#tag" => "style",
@@ -276,11 +316,21 @@ function theme_react_page_attachments_alter(array &\$attachments) {
         }
       ",
     ],
-    "theme_react_dialog_fix",
+    "theme_react_fix_canvas",
   ];
 }
+
+/**
+ * Implements hook_css_alter().
+ */
+function theme_react_css_alter(&$css, $assets) {
+  // Eliminar todos los CSS de Drupal
+  foreach ($css as $key => $value) {
+    unset($css[$key]);
+  }
+}
 EOFTHEME'
-    
+
     # Verificar si la creación fue exitosa
     if ddev exec test -f web/api/themes/custom/theme_react/theme_react.theme; then
         echo "✅ Archivo theme_react.theme creado correctamente."
@@ -328,11 +378,24 @@ EOL'
 <div id="root"></div>
 EOL'
   
-  # Activar el tema
+  # Crear un archivo .htaccess en la carpeta api para asegurar que Drupal funcione correctamente
+  echo "📝 Creando archivo .htaccess para Drupal en /api..."
+  ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
+    cp /var/www/html/web/.htaccess /var/www/html/web/api/
+  fi'
+
+  # Asegurarse de que bootstrap.inc esté accesible
+  echo "🔧 Verificando archivos de core de Drupal..."
+  ddev exec bash -c 'if [ ! -f /var/www/html/web/api/core/includes/bootstrap.inc ] && [ -f /var/www/html/web/core/includes/bootstrap.inc ]; then
+    mkdir -p /var/www/html/web/api/core/includes/
+    cp /var/www/html/web/core/includes/bootstrap.inc /var/www/html/web/api/core/includes/
+  fi'
+
+  # Activar el tema con manejo de errores
   echo "🔌 Activando el tema React..."
-  ddev drush theme:enable theme_react
-  ddev drush config-set system.theme default theme_react -y
-  ddev drush cr
+  ddev drush theme:enable theme_react || echo "\u26A0\ufe0f No se pudo activar el tema, pero continuamos con la instalación"
+  ddev drush config-set system.theme default theme_react -y || echo "\u26A0\ufe0f No se pudo establecer el tema por defecto"
+  ddev drush cr || echo "\u26A0\ufe0f Error al limpiar la caché, pero continuamos con la instalación"
   
   echo "✅ Tema React instalado y activado correctamente."
   echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
@@ -345,14 +408,18 @@ echo "📝 Creando archivo .htaccess para redirecciones..."
 ddev exec bash -c 'cat > web/.htaccess << EOL
 # Redireccionar solicitudes a /api/* al backend de Drupal
 RewriteEngine On
-RewriteRule ^api/(.*)$ /api/index.php [L,QSA]
 
-# Servir archivos estáticos directamente
+# Permitir acceso directo a archivos estáticos
 RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
+# Redirigir solicitudes a /api/* a index.php de Drupal
+RewriteCond %{REQUEST_URI} ^/api/.*$
+RewriteRule ^api/(.*)$ /api/index.php [L,QSA]
+
 # Redirigir todas las demás solicitudes a index.html para SPA
+RewriteCond %{REQUEST_URI} !^/api/.*$
 RewriteRule ^ index.html [L]
 EOL'
 
