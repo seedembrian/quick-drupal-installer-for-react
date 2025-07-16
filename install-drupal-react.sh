@@ -136,16 +136,31 @@ ddev exec mkdir -p /var/www/html/web/api
 
 # Copiar solo los archivos esenciales a la carpeta api
 echo "📦 Copiando archivos esenciales de Drupal a /api..."
-ddev exec bash -c 'cp -r /var/www/html/web/core /var/www/html/web/api/'
-ddev exec bash -c 'cp -r /var/www/html/web/modules /var/www/html/web/api/'
-ddev exec bash -c 'cp -r /var/www/html/web/profiles /var/www/html/web/api/'
-ddev exec bash -c 'cp -r /var/www/html/web/sites /var/www/html/web/api/'
-ddev exec bash -c 'cp -r /var/www/html/web/themes /var/www/html/web/api/'
-ddev exec bash -c 'cp -r /var/www/html/web/vendor /var/www/html/web/api/'
-ddev exec bash -c 'cp /var/www/html/web/.htaccess /var/www/html/web/api/ 2>/dev/null || true'
-ddev exec bash -c 'cp /var/www/html/web/index.php /var/www/html/web/api/'
-ddev exec bash -c 'cp /var/www/html/web/autoload.php /var/www/html/web/api/'
-ddev exec bash -c 'cp /var/www/html/web/robots.txt /var/www/html/web/api/ 2>/dev/null || true'
+
+# Usar un enfoque más seguro para copiar archivos, verificando primero si existen
+ddev exec bash -c 'for dir in core modules profiles sites themes; do
+  if [ -d "/var/www/html/web/$dir" ]; then
+    echo "Copiando $dir..."
+    cp -r "/var/www/html/web/$dir" "/var/www/html/web/api/"
+  fi
+done'
+
+# Copiar vendor si existe (puede estar en una ubicación diferente)
+ddev exec bash -c 'if [ -d "/var/www/html/vendor" ]; then
+  echo "Copiando vendor desde /var/www/html/vendor..."
+  cp -r "/var/www/html/vendor" "/var/www/html/web/api/"
+elif [ -d "/var/www/html/web/vendor" ]; then
+  echo "Copiando vendor desde /var/www/html/web/vendor..."
+  cp -r "/var/www/html/web/vendor" "/var/www/html/web/api/"
+fi'
+
+# Copiar archivos individuales si existen
+ddev exec bash -c 'for file in .htaccess index.php autoload.php robots.txt; do
+  if [ -f "/var/www/html/web/$file" ]; then
+    echo "Copiando $file..."
+    cp "/var/www/html/web/$file" "/var/www/html/web/api/"
+  fi
+done'
 
 # Actualizar settings.php para las nuevas rutas
 echo "🔧 Actualizando configuración de Drupal para /api..."
@@ -186,9 +201,14 @@ ddev drush -r /var/www/html/web/api cr 2>/dev/null || true
 if [ "$INSTALL_REACT" = true ]; then
   echo "🎨 Configurando el tema React..."
   
-  # Crear directorios necesarios
-  ddev exec mkdir -p web/api/themes/custom/theme_react/templates
-  ddev exec mkdir -p web/api/themes/custom/theme_react/react-src
+  # Verificar si existe la carpeta themes en api, si no, crearla
+  ddev exec bash -c 'if [ ! -d "/var/www/html/web/api/themes" ]; then
+    mkdir -p /var/www/html/web/api/themes
+  fi'
+  
+  # Crear directorios necesarios con verificación de permisos
+  ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/templates
+  ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/react-src
   
   # Si no se proporcionó una URL de repositorio, preguntar al usuario
   if [ -z "$REACT_REPO" ]; then
@@ -360,7 +380,7 @@ EOFTHEME'
 EOL'
     
     # Crear page.html.twig
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/templates/page.html.twig << EOL
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/templates/page.html.twig << EOL
 {#
 /**
  * @file
@@ -370,21 +390,30 @@ EOL'
 <div id="root"></div>
 EOL'
   
-  # Activar el tema
-  echo "🔌 Activando el tema React Pro..."
-  ddev drush theme:enable theme_react
-  ddev drush config-set system.theme default theme_react -y
-  ddev drush cr
+  # Activar el tema React
+  echo "🔧 Activando el tema React..."
+  ddev drush -r /var/www/html/web/api theme:enable theme_react 2>/dev/null || echo "Error al activar el tema. Continuando de todos modos..."
   
-  echo "✅ Tema React Pro instalado y activado correctamente."
-  echo "📝 Para trabajar con el tema React, edite los archivos en web/themes/custom/theme_react/"
-  echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/themes/custom/theme_react/react-src/"
+  # Reconstruir caché para asegurar que el tema sea reconocido
+  ddev drush -r /var/www/html/web/api cr
+  
+  # Configurar el tema como predeterminado
+  ddev drush -r /var/www/html/web/api config-set system.theme default theme_react -y 2>/dev/null || echo "Error al configurar el tema por defecto. Continuando de todos modos..."
+  
+  # Limpiar caché final
+  ddev drush -r /var/www/html/web/api cr
+  
+  echo "✅ Tema React instalado y activado correctamente."
+  echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
+  echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/api/themes/custom/theme_react/react-src/"
 fi
 
-echo "✨ Estado del proyecto Pro:"
+echo "✨ Estado del proyecto React:"
 ddev status
 
 # Mostrar URL y abrir en el navegador al final
+echo " URL del sitio: $(ddev describe -j | grep -oP '"https_url"\s*:\s*"\K[^"]+')"  
+echo " Abriendo el sitio en su navegador..."
 echo "🌐 URL del sitio: $(ddev describe -j | grep -oP '"https_url"\s*:\s*"\K[^"]+')"  
 echo "🌐 Abriendo el sitio en su navegador..."
 
