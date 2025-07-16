@@ -444,6 +444,14 @@ EOL'
  * Implements hook_preprocess_html().
  */
 function theme_react_preprocess_html(&$variables) {
+  // Inicializar la estructura si no existe
+  if (!isset($variables['#attached'])) {
+    $variables['#attached'] = [];
+  }
+  if (!isset($variables['#attached']['html_head'])) {
+    $variables['#attached']['html_head'] = [];
+  }
+  
   // Buscar archivos en la carpeta assets
   $assets_dir = DRUPAL_ROOT . "/../assets";
   
@@ -459,7 +467,7 @@ function theme_react_preprocess_html(&$variables) {
         
         // Procesar archivos CSS
         if (substr($file, -4) == ".css") {
-          $variables["#attached"]["html_head"][] = [
+          $variables['#attached']['html_head'][] = [
             [
               "#type" => "html_tag",
               "#tag" => "link",
@@ -474,7 +482,7 @@ function theme_react_preprocess_html(&$variables) {
         
         // Procesar archivos JS
         if (substr($file, -3) == ".js") {
-          $variables["#attached"]["html_head"][] = [
+          $variables['#attached']['html_head'][] = [
             [
               "#type" => "html_tag",
               "#tag" => "script",
@@ -626,13 +634,13 @@ EOL'
 
   # Asegurarse de que Drupal reconozca el tema
   echo "🔍 Verificando el tema en Drupal..."
-  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush cr'
+  ddev drush cr || echo "⚠️ Error al limpiar la caché, pero continuamos con la instalación"
   
   # Activar el tema con manejo de errores
   echo "🔌 Activando el tema React..."
-  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush theme:enable theme_react || echo "\u26a0\ufe0f No se pudo activar el tema, pero continuamos con la instalación"'
-  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush config-set system.theme default theme_react -y || echo "\u26a0\ufe0f No se pudo establecer el tema por defecto"'
-  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush cr || echo "\u26a0\ufe0f Error al limpiar la caché, pero continuamos con la instalación"'
+  ddev drush theme:enable theme_react || echo "⚠️ No se pudo activar el tema, pero continuamos con la instalación"
+  ddev drush config-set system.theme default theme_react -y || echo "⚠️ No se pudo establecer el tema por defecto"
+  ddev drush cr || echo "⚠️ Error al limpiar la caché, pero continuamos con la instalación"
   
   echo "✅ Tema React instalado y activado correctamente."
   echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
@@ -679,7 +687,6 @@ ddev exec bash -c 'cat > /var/www/html/web/index.html << EOL
 </body>
 </html>
 EOL'
-fi
 
 echo "✨ Estado del proyecto React:"
 ddev status
