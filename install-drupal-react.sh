@@ -9,7 +9,7 @@ show_help() {
   echo "  -u, --user USER     Admin username (default: admin)"
   echo "  -p, --pass PASS     Admin password (default: admin)"
   echo "  -e, --email EMAIL   Admin email (default: admin@example.com)"
-  echo "  -n, --name NAME     Site name (default: My Drupal CMS Pro)"
+  echo "  -n, --name NAME     Site name (default: My Drupal React Site)"
   echo "  -r, --react         Install React theme"
   echo "  -g, --git URL       Git repository URL for React theme"
   echo "  -h, --help          Show this help"
@@ -17,12 +17,12 @@ show_help() {
 }
 
 # Default variables
-PROJECT_NAME="drupal-react-app"
+PROJECT_NAME="drupal-react"
 FULL_INSTALL=false
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 ADMIN_EMAIL="admin@example.com"
-SITE_NAME="My Drupal React App"
+SITE_NAME="My Drupal React Site"
 INSTALL_REACT=false
 REACT_REPO=""
 
@@ -97,18 +97,18 @@ mkdir "$PROJECT_NAME"
 cd "$PROJECT_NAME" || exit 1
 
 # Configure and start DDEV
-echo "⚙️ Configurando DDEV para Drupal con React..."
+echo "⚙️ Configurando DDEV..."
 ddev config --project-type=drupal11 --docroot=web --project-name="$PROJECT_NAME" || exit 1
 
-echo "🚀 Iniciando DDEV para Drupal con React..."
+echo "🚀 Iniciando DDEV..."
 ddev start || exit 1
 
 # Download Drupal CMS
-echo "📦 Descargando Drupal para integración con React..."
+echo "📦 Descargando Drupal CMS..."
 ddev composer create drupal/cms || exit 1
 
 if [ "$FULL_INSTALL" = true ]; then
-  echo "⚙️ Instalando Drupal con React, por favor espere..."
+  echo "⚙️ Instalando Drupal CMS, por favor espere..."
   ddev drush site:install "$PROFILE" \
     --account-name="$ADMIN_USER" \
     --account-pass="$ADMIN_PASS" \
@@ -118,13 +118,13 @@ if [ "$FULL_INSTALL" = true ]; then
 
   # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
   echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role-remove-perm content_editor "access toolbar" 2>/dev/null || true
+  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
 
-  echo "✅ Drupal con React instalado."
+  echo "✅ Drupal CMS con React instalado."
   echo "👤 Usuario: $ADMIN_USER"
   echo "🔑 Contraseña: $ADMIN_PASS"
 else
-  echo "📦 Proyecto Drupal con React creado."
+  echo "📦 Proyecto Drupal React creado."
 fi
 
 # Instalar tema React si se solicitó
@@ -154,29 +154,7 @@ if [ "$INSTALL_REACT" = true ]; then
       echo "📦 Instalando dependencias de Node.js..."
       ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
       
-      # Modificar la configuración de Vite existente para que el build se haga en la raíz de la carpeta web
-      echo "📝 Modificando la configuración de Vite para build en la raíz de la carpeta web..."
-      ddev exec bash -c 'if [ -f web/themes/custom/theme_react/react-src/vite.config.js ]; then
-        # Hacer backup del archivo original
-        cp web/themes/custom/theme_react/react-src/vite.config.js web/themes/custom/theme_react/react-src/vite.config.js.bak
-        
-        # Modificar la configuración de Vite para cambiar el outDir
-        sed -i "s|\(outDir:\s*[\"\']\)\(dist\|\./dist\|\.\)[\"\']"|\1../../../\"|g" web/themes/custom/theme_react/react-src/vite.config.js
-        
-        # Asegurarse de que emptyOutDir esté en false
-        if grep -q "emptyOutDir" web/themes/custom/theme_react/react-src/vite.config.js; then
-          sed -i "s|emptyOutDir:\s*true|emptyOutDir: false|g" web/themes/custom/theme_react/react-src/vite.config.js
-        else
-          # Si no existe la propiedad emptyOutDir, añadirla después de outDir
-          sed -i "/outDir:/a\    emptyOutDir: false," web/themes/custom/theme_react/react-src/vite.config.js
-        fi
-        
-        echo "\u2705 Configuración de Vite modificada correctamente."
-      else
-        echo "\u26a0️ No se encontró el archivo vite.config.js en el repositorio clonado."
-      fi'
-      
-      # Construir el proyecto React con la configuración modificada
+      # Construir el proyecto React
       echo "🔨 Construyendo el proyecto React..."
       ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
     fi
@@ -226,7 +204,7 @@ EOL'
 function theme_react_page_attachments_alter(array &\$attachments) {
   // Obtener la ruta base del tema
   \$theme_path = \Drupal::service("extension.list.theme")->getPath("theme_react");
-  \$dist_path = \$theme_path . "/../../assets";
+  \$dist_path = \$theme_path . "/react-src/dist/assets";
   
   // Buscar archivos CSS y JS en la carpeta dist/assets
   if (is_dir(DRUPAL_ROOT . "/" . \$dist_path)) {
@@ -348,7 +326,7 @@ EOL'
   echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/themes/custom/theme_react/react-src/"
 fi
 
-echo "✨ Estado del proyecto Drupal con React:"
+echo "✨ Estado del proyecto:"
 ddev status
 
 # Mostrar URL y abrir en el navegador al final
