@@ -218,13 +218,26 @@ EOL'
     ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/vite.config.js << EOL
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import path from "path";
 
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: "/var/www/html/web",
+    outDir: "../../../../../",
     emptyOutDir: false,
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name].[hash].js",
+        chunkFileNames: "assets/[name].[hash].js",
+        assetFileNames: "assets/[name].[hash].[ext]"
+      }
+    }
   },
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src")
+    }
+  }
 });
 EOL'
     
@@ -371,41 +384,23 @@ EOL'
 EOL'
   fi
   
-  # Clonar el repositorio si se proporcionó una URL
-  if [ -n "$REACT_REPO" ]; then
-    echo "📦 Clonando repositorio React desde $REACT_REPO..."
-    ddev exec git clone "$REACT_REPO" web/api/themes/custom/theme_react/react-src || {
-      echo "⚠️ Error al clonar el repositorio. Creando estructura básica de React..."
-      # Crear estructura básica si falla el clon
-      REACT_REPO=""
-    }
-    
-    # Instalar dependencias si existe package.json
-    if ddev exec test -f web/api/themes/custom/theme_react/react-src/package.json; then
-      echo "📦 Instalando dependencias de Node.js..."
-      ddev exec -d /var/www/html/web/api/themes/custom/theme_react/react-src npm install
-      
-      # Modificar la configuración de build para que los archivos queden en la raíz de /web
-      echo "⚙️ Configurando el build de React para la raíz de /web..."
-      
-      # Verificar si es un proyecto Vite
-      if ddev exec test -f web/api/themes/custom/theme_react/react-src/vite.config.js; then
-        echo "📝 Modificando vite.config.js para build en raíz..."
-        # Crear un archivo de configuración Vite personalizado
-        ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/vite.config.js << EOL
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
+  # Crear carpeta assets en la raíz de web
+  echo "📁 Creando carpeta assets en la raíz de web..."
+  ddev exec bash -c 'mkdir -p /var/www/html/web/assets'
 
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    outDir: "/var/www/html/web",
-    emptyOutDir: false,
-  },
-});
-EOL'
+  # Instalar dependencias si existe package.json
+  if ddev exec test -f web/api/themes/custom/theme_react/react-src/package.json; then
+    echo "📦 Instalando dependencias de Node.js..."
+    ddev exec bash -c 'cd /var/www/html/web/api/themes/custom/theme_react/react-src && npm install'
+    
+    # Construir el proyecto React
+    echo "🔨 Construyendo el proyecto React..."
+    ddev exec bash -c 'cd /var/www/html/web/api/themes/custom/theme_react/react-src && npm run build'
+    
+    # Verificar archivos generados
+    echo "🔍 Verificando archivos generados..."
+    ddev exec bash -c 'ls -la /var/www/html/web/assets/ || echo "No se encontraron archivos en la carpeta assets"'
+  fi
       fi
       
       # Construir el proyecto React
@@ -442,7 +437,7 @@ EOL'
     echo "📝 Creando archivo theme_react.theme vacío..."
     ddev exec bash -c 'touch web/api/themes/custom/theme_react/theme_react.theme'
     
-    # Añadir el código PHP al archivo theme_react.theme (versión simplificada)
+    # Añadir el código PHP al archivo theme_react.theme (versión ultra simplificada)
     echo "📝 Añadiendo código al archivo theme_react.theme..."
     ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
 <?php
@@ -453,64 +448,66 @@ EOL'
  */
 
 /**
- * Implements hook_page_attachments_alter().
+ * Implements hook_preprocess_html().
  */
-function theme_react_page_attachments_alter(array &$attachments) {
-  // Ruta base para los archivos estáticos
-  $base_path = "";
+function theme_react_preprocess_html(&$variables) {
+  // Buscar archivos en la carpeta assets
+  $assets_dir = DRUPAL_ROOT . "/../assets";
   
-  // Buscar archivos CSS y JS en la raíz de /web usando scandir
-  $web_dir = DRUPAL_ROOT . "/../";
-  if (is_dir($web_dir)) {
-    $files = @scandir($web_dir);
+  if (is_dir($assets_dir)) {
+    // Añadir archivos CSS
+    $files = scandir($assets_dir);
+    
     if ($files) {
       foreach ($files as $file) {
-        // Ignorar directorios y archivos que no son CSS o JS
-        if ($file === "." || $file === ".." || is_dir($web_dir . $file)) {
+        if ($file == "." || $file == "..") {
           continue;
         }
         
         // Procesar archivos CSS
-        if (preg_match("/\.css$/", $file)) {
-          $file_path = $base_path . "/" . $file;
-          $attachments["#attached"]["html_head"][] = [
+        if (substr($file, -4) == ".css") {
+          $variables["#attached"]["html_head"][] = [
             [
               "#type" => "html_tag",
               "#tag" => "link",
               "#attributes" => [
                 "rel" => "stylesheet",
-                "href" => $file_path,
+                "href" => "/assets/" . $file,
               ],
             ],
-            "theme_react_css_" . md5($file_path),
+            "theme_react_css_" . md5($file),
           ];
         }
         
         // Procesar archivos JS
-        if (preg_match("/\.js$/", $file)) {
-          $file_path = $base_path . "/" . $file;
-          $attachments["#attached"]["html_head"][] = [
+        if (substr($file, -3) == ".js") {
+          $variables["#attached"]["html_head"][] = [
             [
               "#type" => "html_tag",
               "#tag" => "script",
               "#attributes" => [
-                "src" => $file_path,
+                "src" => "/assets/" . $file,
                 "defer" => TRUE,
               ],
             ],
-            "theme_react_js_" . md5($file_path),
+            "theme_react_js_" . md5($file),
           ];
         }
       }
     }
   }
-  
+}
+
+/**
+ * Implements hook_page_attachments_alter().
+ */
+function theme_react_page_attachments_alter(array &$attachments) {
   // Añadir CSS para el contenedor principal
   $attachments["#attached"]["html_head"][] = [
     [
       "#type" => "html_tag",
       "#tag" => "style",
-      "#value" => "#root { width: 100%; } .dialog-off-canvas-main-canvas { display: contents !important; }",
+      "#value" => "#root{width:100%}.dialog-off-canvas-main-canvas{display:contents!important}",
     ],
     "theme_react_fix_canvas",
   ];
@@ -574,6 +571,23 @@ EOL'
 <div id="root"></div>
 EOL'
   
+  # Mover archivos de Drupal a la carpeta api
+echo "💾 Moviendo Drupal a la carpeta /api..."
+ddev exec bash -c 'mkdir -p /var/www/html/web/api && rsync -a --exclude="api" /var/www/html/web/ /var/www/html/web/api/'
+
+# Asegurarse de que vendor y autoload.php estén correctamente en api
+echo "🔧 Verificando vendor y autoload.php..."
+ddev exec bash -c 'if [ ! -d /var/www/html/web/api/vendor ]; then
+  mkdir -p /var/www/html/web/api/vendor
+  if [ -d /var/www/html/web/vendor ]; then
+    rsync -a /var/www/html/web/vendor/ /var/www/html/web/api/vendor/
+  fi
+fi'
+
+ddev exec bash -c 'if [ ! -f /var/www/html/web/api/autoload.php ] && [ -f /var/www/html/web/autoload.php ]; then
+  cp /var/www/html/web/autoload.php /var/www/html/web/api/
+fi'
+
   # Crear un archivo .htaccess en la carpeta api para asegurar que Drupal funcione correctamente
   echo "📝 Creando archivo .htaccess para Drupal en /api..."
   ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
@@ -595,7 +609,7 @@ name: Theme React
 type: theme
 description: "Tema React para Drupal"
 core_version_requirement: ^9 || ^10 || ^11
-base theme: false
+base theme: stable9
 libraries:
   - theme_react/global
 regions:
@@ -614,13 +628,18 @@ EOL'
   # Crear plantilla page.html.twig simplificada
   ddev exec bash -c 'mkdir -p /var/www/html/web/api/themes/custom/theme_react/templates && cat > /var/www/html/web/api/themes/custom/theme_react/templates/page.html.twig << EOL
 <div id="root"></div>
+{{ page.content }}
 EOL'
 
+  # Asegurarse de que Drupal reconozca el tema
+  echo "🔍 Verificando el tema en Drupal..."
+  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush cr'
+  
   # Activar el tema con manejo de errores
   echo "🔌 Activando el tema React..."
-  ddev drush theme:enable theme_react || echo "⚠️ No se pudo activar el tema, pero continuamos con la instalación"
-  ddev drush config-set system.theme default theme_react -y || echo "⚠️ No se pudo establecer el tema por defecto"
-  ddev drush cr || echo "⚠️ Error al limpiar la caché, pero continuamos con la instalación"
+  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush theme:enable theme_react || echo "\u26a0\ufe0f No se pudo activar el tema, pero continuamos con la instalación"'
+  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush config-set system.theme default theme_react -y || echo "\u26a0\ufe0f No se pudo establecer el tema por defecto"'
+  ddev exec bash -c 'cd /var/www/html/web/api && ../vendor/bin/drush cr || echo "\u26a0\ufe0f Error al limpiar la caché, pero continuamos con la instalación"'
   
   echo "✅ Tema React instalado y activado correctamente."
   echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
