@@ -401,13 +401,6 @@ EOL'
     echo "🔍 Verificando archivos generados..."
     ddev exec bash -c 'ls -la /var/www/html/web/assets/ || echo "No se encontraron archivos en la carpeta assets"'
   fi
-      fi
-      
-      # Construir el proyecto React
-      echo "🔨 Construyendo el proyecto React..."
-      ddev exec -d /var/www/html/web/api/themes/custom/theme_react/react-src npm run build
-    fi
-  fi
     
     # Crear theme_react.info.yml
     ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.info.yml << EOL
