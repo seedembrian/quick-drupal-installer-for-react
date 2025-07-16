@@ -116,9 +116,10 @@ if [ "$FULL_INSTALL" = true ]; then
     --site-name="$SITE_NAME" \
     --yes
 
-  # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
-  echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:perm:remove content_editor "access toolbar" 2>/dev/null || true
+  # Ya no intentamos modificar permisos que podrían no existir
+  echo "🔧 Configurando permisos..."
+  # Simplemente limpiar la caché de Drupal
+  ddev drush cr 2>/dev/null || true
 
   echo "✅ Drupal CMS React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -128,15 +129,26 @@ else
 fi
 
 # Mover Drupal a la carpeta /api dentro de /web
-echo "📦 Moviendo Drupal a la carpeta /api..."
+echo "📦 Preparando estructura para Drupal en /api..."
 
 # Crear la estructura de directorios
 ddev exec mkdir -p /var/www/html/web/api
 
-# Usar rsync para copiar los archivos (más seguro que mover)
-ddev exec bash -c 'rsync -a --exclude="api" /var/www/html/web/ /var/www/html/web/api/'
+# Copiar solo los archivos esenciales a la carpeta api
+echo "📦 Copiando archivos esenciales de Drupal a /api..."
+ddev exec bash -c 'cp -r /var/www/html/web/core /var/www/html/web/api/'
+ddev exec bash -c 'cp -r /var/www/html/web/modules /var/www/html/web/api/'
+ddev exec bash -c 'cp -r /var/www/html/web/profiles /var/www/html/web/api/'
+ddev exec bash -c 'cp -r /var/www/html/web/sites /var/www/html/web/api/'
+ddev exec bash -c 'cp -r /var/www/html/web/themes /var/www/html/web/api/'
+ddev exec bash -c 'cp -r /var/www/html/web/vendor /var/www/html/web/api/'
+ddev exec bash -c 'cp /var/www/html/web/.htaccess /var/www/html/web/api/ 2>/dev/null || true'
+ddev exec bash -c 'cp /var/www/html/web/index.php /var/www/html/web/api/'
+ddev exec bash -c 'cp /var/www/html/web/autoload.php /var/www/html/web/api/'
+ddev exec bash -c 'cp /var/www/html/web/robots.txt /var/www/html/web/api/ 2>/dev/null || true'
 
 # Actualizar settings.php para las nuevas rutas
+echo "🔧 Actualizando configuración de Drupal para /api..."
 ddev exec bash -c 'if [ -f /var/www/html/web/api/sites/default/settings.php ]; then
   # Hacer backup del archivo original
   cp /var/www/html/web/api/sites/default/settings.php /var/www/html/web/api/sites/default/settings.php.bak
@@ -149,14 +161,13 @@ ddev exec bash -c 'if [ -f /var/www/html/web/api/sites/default/settings.php ]; t
   echo "\$base_url = \"https://\" . (isset(\$_SERVER[\"HTTP_HOST\"]) ? \$_SERVER[\"HTTP_HOST\"] : \"localhost\") . \"/api\";" >> /var/www/html/web/api/sites/default/settings.php
 fi'
 
-# Copiar .htaccess a la carpeta api
-ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
-  cp /var/www/html/web/.htaccess /var/www/html/web/api/
+# Actualizar el archivo index.php en la carpeta api para corregir rutas
+echo "🔧 Actualizando index.php en la carpeta /api..."
+ddev exec bash -c 'if [ -f /var/www/html/web/api/index.php ]; then
+  # Modificar el index.php para usar la ruta correcta a autoload.php
+  sed -i "s|require_once \"\.\./autoload\.php\"|require_once \"autoload.php\"|g" /var/www/html/web/api/index.php
+  sed -i "s|\$autoloader = require_once \"\.\./autoload\.php\"|\$autoloader = require_once \"autoload.php\"|g" /var/www/html/web/api/index.php
 fi'
-
-# Eliminar los archivos de Drupal de la raíz de /web (excepto la carpeta api y el archivo index.php)
-echo "🗑️ Eliminando archivos de Drupal de la raíz de /web..."
-ddev exec bash -c 'cd /var/www/html/web && find . -maxdepth 1 -not -path "./api" -not -path "." -not -name "index.php" -exec rm -rf {} \;'
 
 # Crear un nuevo index.php en la raíz que redirija a /api
 echo "📝 Creando archivo index.php en la raíz para redireccionar a /api..."
@@ -167,13 +178,17 @@ header("Location: /api");
 exit;
 EOL'
 
+# Limpiar la caché de Drupal para aplicar los cambios
+echo "🔧 Limpiando caché de Drupal..."
+ddev drush -r /var/www/html/web/api cr 2>/dev/null || true
+
 # Instalar tema React si se solicitó
 if [ "$INSTALL_REACT" = true ]; then
   echo "🎨 Configurando el tema React..."
   
   # Crear directorios necesarios
-  ddev exec mkdir -p web/themes/custom/theme_react/templates
-  ddev exec mkdir -p web/themes/custom/theme_react/react-src
+  ddev exec mkdir -p web/api/themes/custom/theme_react/templates
+  ddev exec mkdir -p web/api/themes/custom/theme_react/react-src
   
   # Si no se proporcionó una URL de repositorio, preguntar al usuario
   if [ -z "$REACT_REPO" ]; then
@@ -187,21 +202,21 @@ if [ "$INSTALL_REACT" = true ]; then
   # Clonar el repositorio si se proporcionó una URL
   if [ -n "$REACT_REPO" ]; then
     echo "📦 Clonando repositorio React desde $REACT_REPO..."
-    ddev exec git clone "$REACT_REPO" web/themes/custom/theme_react/react-src
+    ddev exec git clone "$REACT_REPO" web/api/themes/custom/theme_react/react-src
     
     # Instalar dependencias si existe package.json
-    if ddev exec test -f web/themes/custom/theme_react/react-src/package.json; then
+    if ddev exec test -f web/api/themes/custom/theme_react/react-src/package.json; then
       echo "📦 Instalando dependencias de Node.js..."
-      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
+      ddev exec -d /var/www/html/web/api/themes/custom/theme_react/react-src npm install
       
       # Construir el proyecto React
       echo "🔨 Construyendo el proyecto React..."
-      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
+      ddev exec -d /var/www/html/web/api/themes/custom/theme_react/react-src npm run build
     fi
   fi
     
     # Crear theme_react.info.yml
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.info.yml << EOL
+    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.info.yml << EOL
 name: Theme React
 type: theme
 description: "Tema personalizado con integración de React"
@@ -215,7 +230,7 @@ regions:
 EOL'
     
     # Crear theme_react.libraries.yml
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.libraries.yml << EOL
+    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.libraries.yml << EOL
 global:
   version: VERSION
   js:
@@ -226,11 +241,11 @@ EOL'
     
     # Crear un archivo theme_react.theme vacío
     echo "📝 Creando archivo theme_react.theme vacío..."
-    ddev exec bash -c 'touch web/themes/custom/theme_react/theme_react.theme'
+    ddev exec bash -c 'touch web/api/themes/custom/theme_react/theme_react.theme'
     
     # Añadir el código PHP al archivo theme_react.theme
     echo "📝 Añadiendo código al archivo theme_react.theme..."
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
+    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
 <?php
 
 /**
