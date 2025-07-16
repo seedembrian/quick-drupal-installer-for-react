@@ -116,10 +116,10 @@ if [ "$FULL_INSTALL" = true ]; then
     --site-name="$SITE_NAME" \
     --yes
 
-  # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
-  echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  # Usar role:perm:remove en lugar de role:remove-permission
-  ddev drush role:perm:remove content_editor "access toolbar" 2>/dev/null || true
+  # Ya no intentamos modificar permisos que podrían no existir
+  echo "🔧 Configurando permisos..."
+  # Simplemente limpiar la caché de Drupal
+  ddev drush cr 2>/dev/null || true
 
   echo "✅ Drupal CMS React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -171,19 +171,215 @@ echo "🎨 Configurando el tema React..."
   ddev exec mkdir -p web/api/themes/custom/theme_react/templates
   ddev exec mkdir -p web/api/themes/custom/theme_react/react-src
   
-  # Si no se proporcionó una URL de repositorio, preguntar al usuario
+  # Si no se proporcionó una URL de repositorio, usar un valor por defecto
   if [ -z "$REACT_REPO" ]; then
-    echo "📝 Ingrese la URL del repositorio Git para el tema React (o presione Enter para omitir):"
-    read -r REACT_REPO
+    # No preguntar, simplemente usar un valor por defecto o dejarlo vacío
+    REACT_REPO=""
+    echo "📝 No se proporcionó URL de repositorio Git. Se creará un tema React básico."
   fi
   
   # Crear archivos básicos para el tema React (siempre, independientemente del repositorio)
   echo "📝 Creando archivos básicos para el tema React..."
   
+  # Si no se proporcionó un repositorio o falló la clonación, crear un proyecto React básico
+  if [ -z "$REACT_REPO" ]; then
+    echo "💻 Creando un proyecto React básico..."
+    
+    # Crear package.json básico
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/package.json << EOL
+{
+  "name": "theme-react",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.0.3",
+    "eslint": "^8.45.0",
+    "eslint-plugin-react": "^7.32.2",
+    "eslint-plugin-react-hooks": "^4.6.0",
+    "eslint-plugin-react-refresh": "^0.4.3",
+    "vite": "^4.4.5"
+  }
+}
+EOL'
+    
+    # Crear vite.config.js
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/vite.config.js << EOL
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    outDir: "/var/www/html/web",
+    emptyOutDir: false,
+  },
+});
+EOL'
+    
+    # Crear estructura de directorios
+    ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/react-src/src
+    ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/react-src/public
+    
+    # Crear archivo principal App.jsx
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/App.jsx << EOL
+import { useState } from "react";
+import "./App.css";
+
+function App() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div className="app">
+      <header className="app-header">
+        <h1>Drupal + React</h1>
+        <p>Sitio creado con Quick Drupal Installer for React</p>
+      </header>
+      <main>
+        <div className="card">
+          <button onClick={() => setCount((count) => count + 1)}>
+            Contador: {count}
+          </button>
+        </div>
+        <p className="info">
+          Edita <code>src/App.jsx</code> y guarda para ver los cambios
+        </p>
+      </main>
+    </div>
+  );
+}
+
+export default App;
+EOL'
+    
+    # Crear archivo CSS
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/App.css << EOL
+.app {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 2rem;
+  text-align: center;
+}
+
+.app-header {
+  margin-bottom: 2rem;
+}
+
+.app-header h1 {
+  font-size: 3rem;
+  color: #4f46e5;
+}
+
+.card {
+  padding: 2em;
+}
+
+.card button {
+  border-radius: 8px;
+  border: 1px solid transparent;
+  padding: 0.6em 1.2em;
+  font-size: 1em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #1a1a1a;
+  color: white;
+  cursor: pointer;
+  transition: border-color 0.25s;
+}
+
+.card button:hover {
+  border-color: #646cff;
+}
+
+.info {
+  margin-top: 2rem;
+  color: #888;
+}
+
+code {
+  background-color: #f1f1f1;
+  padding: 0.2em 0.4em;
+  border-radius: 3px;
+}
+EOL'
+    
+    # Crear archivo main.jsx
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/main.jsx << EOL
+import React from "react";
+import ReactDOM from "react-dom/client";
+import App from "./App";
+import "./index.css";
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+EOL'
+    
+    # Crear archivo index.css
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/index.css << EOL
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color-scheme: light dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  display: flex;
+  place-items: center;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+#root {
+  width: 100%;
+}
+EOL'
+    
+    # Crear archivo index.html
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/index.html << EOL
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Drupal + React</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+EOL'
+  fi
+  
   # Clonar el repositorio si se proporcionó una URL
   if [ -n "$REACT_REPO" ]; then
     echo "📦 Clonando repositorio React desde $REACT_REPO..."
-    ddev exec git clone "$REACT_REPO" web/api/themes/custom/theme_react/react-src
+    ddev exec git clone "$REACT_REPO" web/api/themes/custom/theme_react/react-src || {
+      echo "⚠️ Error al clonar el repositorio. Creando estructura básica de React..."
+      # Crear estructura básica si falla el clon
+      REACT_REPO=""
+    }
     
     # Instalar dependencias si existe package.json
     if ddev exec test -f web/api/themes/custom/theme_react/react-src/package.json; then
@@ -405,7 +601,7 @@ fi
 
 # Crear un archivo .htaccess para redirigir las solicitudes a la API
 echo "📝 Creando archivo .htaccess para redirecciones..."
-ddev exec bash -c 'cat > web/.htaccess << EOL
+ddev exec bash -c 'cat > /var/www/html/web/.htaccess << EOL
 # Redireccionar solicitudes a /api/* al backend de Drupal
 RewriteEngine On
 
@@ -423,10 +619,9 @@ RewriteCond %{REQUEST_URI} !^/api/.*$
 RewriteRule ^ index.html [L]
 EOL'
 
-# Crear un archivo index.html básico si no existe
-if ! ddev exec test -f web/index.html; then
-  echo "📝 Creando archivo index.html básico..."
-  ddev exec bash -c 'cat > web/index.html << EOL
+# Crear un archivo index.html básico para la aplicación React
+echo "📝 Creando archivo index.html básico..."
+ddev exec bash -c 'cat > /var/www/html/web/index.html << EOL
 <!DOCTYPE html>
 <html lang="es">
 <head>
