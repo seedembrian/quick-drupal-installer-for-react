@@ -153,10 +153,9 @@ ddev exec bash -c 'if [ -f /var/www/html/web/api/sites/default/settings.php ]; t
   # Actualizar rutas
   sed -i "s|\$settings\[\"file_public_path\"\] = \"sites/default/files\"|\$settings\[\"file_public_path\"\] = \"api/sites/default/files\"|g" /var/www/html/web/api/sites/default/settings.php
   
-  # Añadir configuración de base_path si no existe
-  if ! grep -q "\$base_url" /var/www/html/web/api/sites/default/settings.php; then
-    echo "\$base_url = \'https://\$_SERVER[\"HTTP_HOST\"]/api\';" >> /var/www/html/web/api/sites/default/settings.php
-  fi
+  # Añadir configuración de base_path de forma segura
+  echo "# Configuración para sitio en subcarpeta /api" >> /var/www/html/web/api/sites/default/settings.php
+  echo "\$base_url = \"https://\" . (isset(\$_SERVER[\"HTTP_HOST\"]) ? \$_SERVER[\"HTTP_HOST\"] : \"localhost\") . \"/api\";" >> /var/www/html/web/api/sites/default/settings.php
 fi'
 
 # Copiar .htaccess a la carpeta api
@@ -443,9 +442,9 @@ EOL'
     echo "📝 Creando archivo theme_react.theme vacío..."
     ddev exec bash -c 'touch web/api/themes/custom/theme_react/theme_react.theme'
     
-    # Añadir el código PHP al archivo theme_react.theme
+    # Añadir el código PHP al archivo theme_react.theme (versión simplificada)
     echo "📝 Añadiendo código al archivo theme_react.theme..."
-    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
+    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
 <?php
 
 /**
@@ -457,60 +456,61 @@ EOL'
  * Implements hook_page_attachments_alter().
  */
 function theme_react_page_attachments_alter(array &$attachments) {
-  // Buscar archivos CSS y JS en la raíz de /web
-  $web_root = DRUPAL_ROOT . "/../";
+  // Ruta base para los archivos estáticos
+  $base_path = "";
   
-  // Definir rutas relativas para los assets
-  $css_files = glob($web_root . "*.css");
-  $js_files = glob($web_root . "*.js");
-  
-  // Añadir archivos CSS
-  foreach ($css_files as $css_file) {
-    $file_name = basename($css_file);
-    $file_path = "/" . $file_name;
-    
-    $attachments["#attached"]["html_head"][] = [
-      [
-        "#type" => "html_tag",
-        "#tag" => "link",
-        "#attributes" => [
-          "rel" => "stylesheet",
-          "href" => $file_path,
-        ],
-      ],
-      "theme_react_css_" . md5($file_path),
-    ];
+  // Buscar archivos CSS y JS en la raíz de /web usando scandir
+  $web_dir = DRUPAL_ROOT . "/../";
+  if (is_dir($web_dir)) {
+    $files = @scandir($web_dir);
+    if ($files) {
+      foreach ($files as $file) {
+        // Ignorar directorios y archivos que no son CSS o JS
+        if ($file === "." || $file === ".." || is_dir($web_dir . $file)) {
+          continue;
+        }
+        
+        // Procesar archivos CSS
+        if (preg_match("/\.css$/", $file)) {
+          $file_path = $base_path . "/" . $file;
+          $attachments["#attached"]["html_head"][] = [
+            [
+              "#type" => "html_tag",
+              "#tag" => "link",
+              "#attributes" => [
+                "rel" => "stylesheet",
+                "href" => $file_path,
+              ],
+            ],
+            "theme_react_css_" . md5($file_path),
+          ];
+        }
+        
+        // Procesar archivos JS
+        if (preg_match("/\.js$/", $file)) {
+          $file_path = $base_path . "/" . $file;
+          $attachments["#attached"]["html_head"][] = [
+            [
+              "#type" => "html_tag",
+              "#tag" => "script",
+              "#attributes" => [
+                "src" => $file_path,
+                "defer" => TRUE,
+              ],
+            ],
+            "theme_react_js_" . md5($file_path),
+          ];
+        }
+      }
+    }
   }
   
-  // Añadir archivos JS
-  foreach ($js_files as $js_file) {
-    $file_name = basename($js_file);
-    $file_path = "/" . $file_name;
-    
-    $attachments["#attached"]["html_head"][] = [
-      [
-        "#type" => "html_tag",
-        "#tag" => "script",
-        "#attributes" => [
-          "src" => $file_path,
-          "defer" => TRUE,
-        ],
-      ],
-      "theme_react_js_" . md5($file_path),
-    ];
-  }
-  
-  // Añadir CSS para manejar el div dialog-off-canvas-main-canvas
+  // Añadir CSS para el contenedor principal
   $attachments["#attached"]["html_head"][] = [
     [
       "#type" => "html_tag",
       "#tag" => "style",
-      "#value" => "
-        /* Hacer que el wrapper dialog-off-canvas-main-canvas se comporte como un contenedor transparente */
-        .dialog-off-canvas-main-canvas {
-          display: contents !important;
-        }
-      ",
+      "#value" => "#root { width: 100%; } .dialog-off-canvas-main-canvas { display: contents !important; }",
     ],
     "theme_react_fix_canvas",
   ];
@@ -580,18 +580,47 @@ EOL'
     cp /var/www/html/web/.htaccess /var/www/html/web/api/
   fi'
 
-  # Asegurarse de que bootstrap.inc esté accesible
+  # Asegurarse de que los archivos necesarios estén accesibles
   echo "🔧 Verificando archivos de core de Drupal..."
-  ddev exec bash -c 'if [ ! -f /var/www/html/web/api/core/includes/bootstrap.inc ] && [ -f /var/www/html/web/core/includes/bootstrap.inc ]; then
+  ddev exec bash -c 'if [ ! -d /var/www/html/web/api/core/includes/ ]; then
     mkdir -p /var/www/html/web/api/core/includes/
-    cp /var/www/html/web/core/includes/bootstrap.inc /var/www/html/web/api/core/includes/
   fi'
+  
+  # Crear archivos de tema simplificados para evitar errores
+  echo "📝 Creando archivos de tema simplificados..."
+  
+  # Crear theme_react.info.yml simplificado
+  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/theme_react.info.yml << EOL
+name: Theme React
+type: theme
+description: "Tema React para Drupal"
+core_version_requirement: ^9 || ^10 || ^11
+base theme: false
+libraries:
+  - theme_react/global
+regions:
+  content: "Content"
+EOL'
+  
+  # Crear theme_react.libraries.yml simplificado
+  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/theme_react.libraries.yml << EOL
+global:
+  version: VERSION
+  js: {}
+  css:
+    theme: {}
+EOL'
+  
+  # Crear plantilla page.html.twig simplificada
+  ddev exec bash -c 'mkdir -p /var/www/html/web/api/themes/custom/theme_react/templates && cat > /var/www/html/web/api/themes/custom/theme_react/templates/page.html.twig << EOL
+<div id="root"></div>
+EOL'
 
   # Activar el tema con manejo de errores
   echo "🔌 Activando el tema React..."
-  ddev drush theme:enable theme_react || echo "\u26A0\ufe0f No se pudo activar el tema, pero continuamos con la instalación"
-  ddev drush config-set system.theme default theme_react -y || echo "\u26A0\ufe0f No se pudo establecer el tema por defecto"
-  ddev drush cr || echo "\u26A0\ufe0f Error al limpiar la caché, pero continuamos con la instalación"
+  ddev drush theme:enable theme_react || echo "⚠️ No se pudo activar el tema, pero continuamos con la instalación"
+  ddev drush config-set system.theme default theme_react -y || echo "⚠️ No se pudo establecer el tema por defecto"
+  ddev drush cr || echo "⚠️ Error al limpiar la caché, pero continuamos con la instalación"
   
   echo "✅ Tema React instalado y activado correctamente."
   echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
