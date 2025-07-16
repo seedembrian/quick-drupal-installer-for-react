@@ -154,8 +154,60 @@ if [ "$INSTALL_REACT" = true ]; then
       echo "📦 Instalando dependencias de Node.js..."
       ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
       
-      # Construir el proyecto React
-      echo "🔨 Construyendo el proyecto React..."
+      # Construir el proyecto React directamente en la carpeta raíz de Drupal web
+      echo "🔨 Construyendo el proyecto React en la carpeta raíz de Drupal..."
+      # Primero verificamos si existe un archivo vite.config.js o similar para modificarlo
+      if ddev exec test -f web/themes/custom/theme_react/react-src/vite.config.js; then
+        echo "📝 Modificando configuración de Vite para build en carpeta raíz..."
+        # Crear un archivo temporal con la nueva configuración
+        ddev exec bash -c 'cat > web/themes/custom/theme_react/react-src/vite.config.js.new << "EOFVITE"
+// Configuración modificada para build en carpeta raíz de Drupal
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "path";
+
+// https://vitejs.dev/config/
+export default defineConfig({
+  plugins: [react()],
+  build: {
+    // Construir directamente en la carpeta raíz de Drupal
+    outDir: "../../../..",
+    emptyOutDir: false,
+    rollupOptions: {
+      output: {
+        entryFileNames: "assets/[name]-[hash].js",
+        chunkFileNames: "assets/[name]-[hash].js",
+        assetFileNames: "assets/[name]-[hash].[ext]"
+      }
+    }
+  },
+  base: "/"
+});
+EOFVITE'
+        # Reemplazar el archivo original con el nuevo
+        ddev exec mv web/themes/custom/theme_react/react-src/vite.config.js.new web/themes/custom/theme_react/react-src/vite.config.js
+      elif ddev exec test -f web/themes/custom/theme_react/react-src/webpack.config.js; then
+        echo "📝 Modificando configuración de Webpack para build en carpeta raíz..."
+        # Crear un archivo temporal con la nueva configuración para webpack
+        ddev exec bash -c 'cat > web/themes/custom/theme_react/react-src/webpack.config.js.new << "EOFWEBPACK"
+// Configuración modificada para build en carpeta raíz de Drupal
+const path = require("path");
+
+module.exports = {
+  // Configuración existente...
+  output: {
+    path: path.resolve(__dirname, "../../../.."),
+    filename: "assets/[name]-[contenthash].js",
+    publicPath: "/",
+    clean: false
+  },
+  // Resto de la configuración...
+};
+EOFWEBPACK'
+        echo "⚠️ NOTA: La configuración de Webpack es genérica y puede requerir ajustes manuales."
+      fi
+      
+      # Ejecutar el build
       ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
     fi
   fi
@@ -202,21 +254,24 @@ EOL'
  * Implements hook_page_attachments_alter().
  */
 function theme_react_page_attachments_alter(array &\$attachments) {
-  // Obtener la ruta base del tema
-  \$theme_path = \Drupal::service("extension.list.theme")->getPath("theme_react");
-  \$dist_path = \$theme_path . "/react-src/dist/assets";
+  // Buscar archivos CSS y JS tanto en la carpeta raíz como en assets
+  $assets_paths = [
+    'assets', // Carpeta assets en la raíz
+    'web/assets', // Alternativa si se construye en web/assets
+  ];
   
-  // Buscar archivos CSS y JS en la carpeta dist/assets
-  if (is_dir(DRUPAL_ROOT . "/" . \$dist_path)) {
-    \$files = scandir(DRUPAL_ROOT . "/" . \$dist_path);
+  foreach ($assets_paths as $assets_path) {
+    // Verificar si la carpeta existe
+    if (is_dir(DRUPAL_ROOT . '/' . $assets_path)) {
+      $files = scandir(DRUPAL_ROOT . '/' . $assets_path);
     
     foreach (\$files as \$file) {
       // Ignorar directorios y archivos ocultos
-      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$dist_path . "/" . \$file)) {
+      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . $assets_path . "/" . \$file)) {
         continue;
       }
       
-      \$file_path = "/" . \$dist_path . "/" . \$file;
+      \$file_path = "/" . $assets_path . "/" . \$file;
       
       // Añadir archivos CSS
       if (preg_match("/\\.css\$/", \$file)) {
@@ -249,6 +304,7 @@ function theme_react_page_attachments_alter(array &\$attachments) {
         ];
       }
     }
+  }
   }
   
   // Añadir CSS para manejar el div dialog-off-canvas-main-canvas
