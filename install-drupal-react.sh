@@ -116,10 +116,9 @@ if [ "$FULL_INSTALL" = true ]; then
     --site-name="$SITE_NAME" \
     --yes
 
-  # Ya no intentamos modificar permisos que podrían no existir
-  echo "🔧 Configurando permisos..."
-  # Simplemente limpiar la caché de Drupal
-  ddev drush cr 2>/dev/null || true
+  # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
+  echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
+  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
 
   echo "✅ Drupal CMS React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -128,8 +127,8 @@ else
   echo "📦 Proyecto Drupal React creado."
 fi
 
-# Configurar Drupal en la carpeta /api de forma más segura
-echo "📦 Configurando Drupal en la carpeta /api..."
+# Mover Drupal a la carpeta /api dentro de /web
+echo "📦 Moviendo Drupal a la carpeta /api..."
 
 # Crear la estructura de directorios
 ddev exec mkdir -p /var/www/html/web/api
@@ -145,7 +144,7 @@ ddev exec bash -c 'if [ -f /var/www/html/web/api/sites/default/settings.php ]; t
   # Actualizar rutas
   sed -i "s|\$settings\[\"file_public_path\"\] = \"sites/default/files\"|\$settings\[\"file_public_path\"\] = \"api/sites/default/files\"|g" /var/www/html/web/api/sites/default/settings.php
   
-  # Añadir configuración de base_path de forma segura
+  # Añadir configuración de base_path
   echo "# Configuración para sitio en subcarpeta /api" >> /var/www/html/web/api/sites/default/settings.php
   echo "\$base_url = \"https://\" . (isset(\$_SERVER[\"HTTP_HOST\"]) ? \$_SERVER[\"HTTP_HOST\"] : \"localhost\") . \"/api\";" >> /var/www/html/web/api/sites/default/settings.php
 fi'
@@ -155,270 +154,41 @@ ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
   cp /var/www/html/web/.htaccess /var/www/html/web/api/
 fi'
 
-# Mover archivos de Drupal a la carpeta api
-echo "💾 Moviendo Drupal a la carpeta /api..."
-ddev exec bash -c 'mkdir -p /var/www/html/web/api && rsync -a --exclude="api" /var/www/html/web/ /var/www/html/web/api/'
-
-# Asegurarse de que vendor y autoload.php estén correctamente en api
-echo "🔧 Verificando vendor y autoload.php..."
-ddev exec bash -c 'if [ ! -d /var/www/html/web/api/vendor ]; then
-  mkdir -p /var/www/html/web/api/vendor
-  if [ -d /var/www/html/web/vendor ]; then
-    rsync -a /var/www/html/web/vendor/ /var/www/html/web/api/vendor/
+# Instalar tema React si se solicitó
+if [ "$INSTALL_REACT" = true ]; then
+  echo "🎨 Configurando el tema React..."
+  
+  # Crear directorios necesarios
+  ddev exec mkdir -p web/themes/custom/theme_react/templates
+  ddev exec mkdir -p web/themes/custom/theme_react/react-src
+  
+  # Si no se proporcionó una URL de repositorio, preguntar al usuario
+  if [ -z "$REACT_REPO" ]; then
+    echo "📝 Ingrese la URL del repositorio Git para el tema React (o presione Enter para omitir):"
+    read -r REACT_REPO
   fi
-fi'
-
-ddev exec bash -c 'if [ ! -f /var/www/html/web/api/autoload.php ] && [ -f /var/www/html/web/autoload.php ]; then
-  cp /var/www/html/web/autoload.php /var/www/html/web/api/
-fi'
-
-# Crear un archivo .htaccess en la carpeta api para asegurar que Drupal funcione correctamente
-echo "📝 Creando archivo .htaccess para Drupal en /api..."
-ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
-  cp /var/www/html/web/.htaccess /var/www/html/web/api/
-fi'
-
-# Instalar tema React (siempre se instala)
-echo "🎨 Configurando el tema React..."
-
-# Crear directorios necesarios
-ddev exec mkdir -p web/api/themes/custom/theme_react/templates
-ddev exec mkdir -p web/api/themes/custom/theme_react/react-src
-
-# Si no se proporcionó una URL de repositorio, usar un valor por defecto
-if [ -z "$REACT_REPO" ]; then
-  # No preguntar, simplemente usar un valor por defecto o dejarlo vacío
-  REACT_REPO=""
-  echo "📝 No se proporcionó URL de repositorio Git. Se creará un tema React básico."
-fi
-
-# Crear archivos básicos para el tema React (siempre, independientemente del repositorio)
-echo "📝 Creando archivos básicos para el tema React..."
-
-# Crear carpeta assets en la raíz de web
-echo "📁 Creando carpeta assets en la raíz de web..."
-ddev exec bash -c 'mkdir -p /var/www/html/web/assets'
-
-# Si no se proporcionó un repositorio o falló la clonación, crear un proyecto React básico
-if [ -z "$REACT_REPO" ]; then
-  echo "💻 Creando un proyecto React básico..."
   
-  # Crear package.json básico
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/package.json << EOL
-{
-  "name": "theme-react",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint . --ext js,jsx --report-unused-disable-directives --max-warnings 0",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.15",
-    "@types/react-dom": "^18.2.7",
-    "@vitejs/plugin-react": "^4.0.3",
-    "eslint": "^8.45.0",
-    "eslint-plugin-react": "^7.32.2",
-    "eslint-plugin-react-hooks": "^4.6.0",
-    "eslint-plugin-react-refresh": "^0.4.3",
-    "vite": "^4.4.5"
-  }
-}
-EOL'
+  # Crear archivos básicos para el tema React (siempre, independientemente del repositorio)
+  echo "📝 Creando archivos básicos para el tema React..."
   
-  # Crear vite.config.js
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/vite.config.js << EOL
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    outDir: "../../../../../",
-    emptyOutDir: false,
-    rollupOptions: {
-      output: {
-        entryFileNames: "assets/[name].[hash].js",
-        chunkFileNames: "assets/[name].[hash].js",
-        assetFileNames: "assets/[name].[hash].[ext]"
-      }
-    }
-  },
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src")
-    }
-  }
-});
-EOL'
-  
-  # Crear estructura de directorios
-  ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/react-src/src
-  ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/react-src/public
-  
-  # Crear archivo principal App.jsx
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/App.jsx << EOL
-import { useState } from "react";
-import "./App.css";
-
-function App() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div className="app">
-      <header className="app-header">
-        <h1>Drupal + React</h1>
-        <p>Sitio creado con Quick Drupal Installer for React</p>
-      </header>
-      <main>
-        <div className="card">
-          <button onClick={() => setCount((count) => count + 1)}>
-            Contador: {count}
-          </button>
-        </div>
-        <p className="info">
-          Edita <code>src/App.jsx</code> y guarda para ver los cambios
-        </p>
-      </main>
-    </div>
-  );
-}
-
-export default App;
-EOL'
-  
-  # Crear archivo CSS
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/App.css << EOL
-.app {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
-
-.app-header {
-  margin-bottom: 2rem;
-}
-
-.app-header h1 {
-  font-size: 3rem;
-  color: #4f46e5;
-}
-
-.card {
-  padding: 2em;
-}
-
-.card button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  color: white;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-
-.card button:hover {
-  border-color: #646cff;
-}
-
-.info {
-  margin-top: 2rem;
-  color: #888;
-}
-
-code {
-  background-color: #f1f1f1;
-  padding: 0.2em 0.4em;
-  border-radius: 3px;
-}
-EOL'
-  
-  # Crear archivo main.jsx
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/main.jsx << EOL
-import React from "react";
-import ReactDOM from "react-dom/client";
-import App from "./App";
-import "./index.css";
-
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
-EOL'
-  
-  # Crear archivo index.css
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/src/index.css << EOL
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color-scheme: light dark;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
-  min-height: 100vh;
-}
-
-#root {
-  width: 100%;
-}
-EOL'
-  
-  # Crear archivo index.html
-  ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/react-src/index.html << EOL
-<!DOCTYPE html>
-<html lang="es">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Drupal + React</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
-EOL'
-fi
-
-# Instalar dependencias si existe package.json
-if ddev exec test -f web/api/themes/custom/theme_react/react-src/package.json; then
-  echo "📦 Instalando dependencias de Node.js..."
-  ddev exec bash -c 'cd /var/www/html/web/api/themes/custom/theme_react/react-src && npm install'
-  
-  # Construir el proyecto React
-  echo "🔨 Construyendo el proyecto React..."
-  ddev exec bash -c 'cd /var/www/html/web/api/themes/custom/theme_react/react-src && npm run build'
-  
-  # Verificar archivos generados
-  echo "🔍 Verificando archivos generados..."
-  ddev exec bash -c 'ls -la /var/www/html/web/assets/ || echo "No se encontraron archivos en la carpeta assets"'
-fi
-  
-# Crear theme_react.info.yml
-ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.info.yml << EOL
+  # Clonar el repositorio si se proporcionó una URL
+  if [ -n "$REACT_REPO" ]; then
+    echo "📦 Clonando repositorio React desde $REACT_REPO..."
+    ddev exec git clone "$REACT_REPO" web/themes/custom/theme_react/react-src
+    
+    # Instalar dependencias si existe package.json
+    if ddev exec test -f web/themes/custom/theme_react/react-src/package.json; then
+      echo "📦 Instalando dependencias de Node.js..."
+      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
+      
+      # Construir el proyecto React
+      echo "🔨 Construyendo el proyecto React..."
+      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
+    fi
+  fi
+    
+    # Crear theme_react.info.yml
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.info.yml << EOL
 name: Theme React
 type: theme
 description: "Tema personalizado con integración de React"
@@ -430,9 +200,9 @@ regions:
   content: "Content"
   footer: "Footer"
 EOL'
-
-# Crear theme_react.libraries.yml
-ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.libraries.yml << EOL
+    
+    # Crear theme_react.libraries.yml
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.libraries.yml << EOL
 global:
   version: VERSION
   js:
@@ -440,14 +210,14 @@ global:
   css:
     # Los archivos CSS se cargan dinámicamente desde el hook
 EOL'
-
-# Crear archivo theme_react.theme vacío
-echo "📝 Creando archivo theme_react.theme vacío..."
-ddev exec bash -c 'touch web/api/themes/custom/theme_react/theme_react.theme'
-
-# Añadir el código PHP al archivo theme_react.theme
-echo "📝 Añadiendo código al archivo theme_react.theme..."
-ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
+    
+    # Crear un archivo theme_react.theme vacío
+    echo "📝 Creando archivo theme_react.theme vacío..."
+    ddev exec bash -c 'touch web/themes/custom/theme_react/theme_react.theme'
+    
+    # Añadir el código PHP al archivo theme_react.theme
+    echo "📝 Añadiendo código al archivo theme_react.theme..."
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
 <?php
 
 /**
@@ -458,78 +228,111 @@ ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/theme_r
 /**
  * Implements hook_page_attachments_alter().
  */
-function theme_react_page_attachments_alter(array &$attachments) {
-  // Añadir CSS para el contenedor principal
-  $attachments["#attached"]["html_head"][] = [
-    [
-      "#type" => "html_tag",
-      "#tag" => "style",
-      "#value" => "#root{width:100%}.dialog-off-canvas-main-canvas{display:contents!important}",
-    ],
-    "theme_react_fix_canvas",
-  ];
+function theme_react_page_attachments_alter(array &\$attachments) {
+  // Obtener la ruta base del tema
+  \$theme_path = \Drupal::service("extension.list.theme")->getPath("theme_react");
+  \$dist_path = \$theme_path . "/react-src/dist/assets";
   
-  // Buscar archivos en la carpeta assets usando ruta absoluta
-  $assets_dir = DRUPAL_ROOT . "/../assets";
-  
-  if (is_dir($assets_dir)) {
-    $files = scandir($assets_dir);
+  // Buscar archivos CSS y JS en la carpeta dist/assets
+  if (is_dir(DRUPAL_ROOT . "/" . \$dist_path)) {
+    \$files = scandir(DRUPAL_ROOT . "/" . \$dist_path);
     
-    if ($files) {
-      foreach ($files as $file) {
-        if ($file === "." || $file === ".." || is_dir($assets_dir . "/" . $file)) {
-          continue;
-        }
-        
-        $file_path = "/assets/" . $file;
-        
-        // Añadir archivos CSS
-        if (preg_match("/\.css$/", $file)) {
-          $attachments["#attached"]["html_head"][] = [
-            [
-              "#type" => "html_tag",
-              "#tag" => "link",
-              "#attributes" => [
-                "rel" => "stylesheet",
-                "href" => $file_path,
-              ],
+    foreach (\$files as \$file) {
+      // Ignorar directorios y archivos ocultos
+      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$dist_path . "/" . \$file)) {
+        continue;
+      }
+      
+      \$file_path = "/" . \$dist_path . "/" . \$file;
+      
+      // Añadir archivos CSS
+      if (preg_match("/\\.css\$/", \$file)) {
+        \$attachments["#attached"]["html_head"][] = [
+          [
+            "#type" => "html_tag",
+            "#tag" => "link",
+            "#attributes" => [
+              "rel" => "stylesheet",
+              "href" => \$file_path,
             ],
-            "theme_react_css_" . md5($file),
-          ];
-        }
-        
-        // Añadir archivos JS
-        if (preg_match("/\.js$/", $file)) {
-          $attachments["#attached"]["html_head"][] = [
-            [
-              "#type" => "html_tag",
-              "#tag" => "script",
-              "#attributes" => [
-                "src" => $file_path,
-                "defer" => TRUE,
-              ],
+          ],
+          "theme_react_css_" . md5(\$file),
+        ];
+      }
+      
+      // Añadir archivos JS
+      if (preg_match("/\\.js\$/", \$file)) {
+        \$attachments["#attached"]["html_head"][] = [
+          [
+            "#type" => "html_tag",
+            "#tag" => "script",
+            "#attributes" => [
+              "src" => \$file_path,
+              "type" => "module",
+              "defer" => TRUE,
             ],
-            "theme_react_js_" . md5($file),
-          ];
-        }
+          ],
+          "theme_react_js_" . md5(\$file),
+        ];
       }
     }
   }
-}
-
-/**
- * Implements hook_css_alter().
- */
-function theme_react_css_alter(&$css, $assets) {
-  // Eliminar todos los CSS de Drupal
-  foreach ($css as $key => $value) {
-    unset($css[$key]);
-  }
+  
+  // Añadir CSS para manejar el div dialog-off-canvas-main-canvas
+  \$attachments["#attached"]["html_head"][] = [
+    [
+      "#type" => "html_tag",
+      "#tag" => "style",
+      "#value" => "
+        /* Hacer que el wrapper dialog-off-canvas-main-canvas se comporte como un contenedor transparente */
+        .dialog-off-canvas-main-canvas {
+          display: contents !important;
+        }
+      ",
+    ],
+    "theme_react_dialog_fix",
+  ];
 }
 EOFTHEME'
-
-# Crear page.html.twig
-ddev exec bash -c 'cat > web/api/themes/custom/theme_react/templates/page.html.twig << EOL
+    
+    # Verificar si la creación fue exitosa
+    if ddev exec test -f web/themes/custom/theme_react/theme_react.theme; then
+        echo "✅ Archivo theme_react.theme creado correctamente."
+    else
+        echo "❌ Error: No se pudo crear el archivo theme_react.theme."
+    fi
+    
+    # Eliminar el archivo theme_react.theme.test si existe
+    ddev exec bash -c 'rm -f web/themes/custom/theme_react/theme_react.theme.test 2>/dev/null || true'
+    
+    # Crear html.html.twig
+    ddev exec mkdir -p web/themes/custom/theme_react/templates
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/templates/html.html.twig << EOL
+{#
+/**
+ * @file
+ * Theme override for the basic structure of a single Drupal page.
+ */
+#}
+<!DOCTYPE html>
+<html{{ html_attributes }}>
+  <head>
+    <head-placeholder token="{{ placeholder_token }}">
+    <title>{{ head_title|safe_join(" | ") }}</title>
+    <css-placeholder token="{{ placeholder_token }}">
+    <js-placeholder token="{{ placeholder_token }}">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  </head>
+  <body{{ attributes }}>
+    {{ page }}
+    {# <js-bottom-placeholder token="{{ placeholder_token }}"> #}
+  </body>
+</html>
+EOL'
+    
+    # Crear page.html.twig
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/templates/page.html.twig << EOL
 {#
 /**
  * @file
@@ -538,63 +341,19 @@ ddev exec bash -c 'cat > web/api/themes/custom/theme_react/templates/page.html.t
 #}
 <div id="root"></div>
 EOL'
+  
+  # Activar el tema
+  echo "🔌 Activando el tema React Pro..."
+  ddev drush theme:enable theme_react
+  ddev drush config-set system.theme default theme_react -y
+  ddev drush cr
+  
+  echo "✅ Tema React Pro instalado y activado correctamente."
+  echo "📝 Para trabajar con el tema React, edite los archivos en web/themes/custom/theme_react/"
+  echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/themes/custom/theme_react/react-src/"
+fi
 
-# Asegurarse de que Drupal reconozca el tema
-echo "🔍 Verificando el tema en Drupal..."
-ddev drush cr || echo "⚠️ Error al limpiar la caché, pero continuamos con la instalación"
-
-# Activar el tema con manejo de errores
-echo "🔌 Activando el tema React..."
-ddev drush theme:enable theme_react || echo "⚠️ No se pudo activar el tema, pero continuamos con la instalación"
-ddev drush config-set system.theme default theme_react -y || echo "⚠️ No se pudo establecer el tema por defecto"
-ddev drush cr || echo "⚠️ Error al limpiar la caché, pero continuamos con la instalación"
-
-echo "✅ Tema React instalado y activado correctamente."
-echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
-echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/api/themes/custom/theme_react/react-src/"
-echo "🌐 Los archivos compilados de React se ubicarán en la raíz de /web"
-
-# Crear un archivo .htaccess para redirigir las solicitudes a la API
-echo "📝 Creando archivo .htaccess para redirecciones..."
-ddev exec bash -c 'cat > /var/www/html/web/.htaccess << EOL
-# Redireccionar solicitudes a /api/* al backend de Drupal
-RewriteEngine On
-
-# Permitir acceso directo a archivos estáticos
-RewriteCond %{REQUEST_FILENAME} -f [OR]
-RewriteCond %{REQUEST_FILENAME} -d
-RewriteRule ^ - [L]
-
-# Redirigir solicitudes a /api/* a index.php de Drupal
-RewriteCond %{REQUEST_URI} ^/api/.*$
-RewriteRule ^api/(.*)$ /api/index.php [L,QSA]
-
-# Redirigir todas las demás solicitudes a index.html para SPA
-RewriteCond %{REQUEST_URI} !^/api/.*$
-RewriteRule ^ index.html [L]
-EOL'
-
-# Crear un archivo index.html básico para la aplicación React
-echo "📝 Creando archivo index.html básico..."
-ddev exec bash -c 'cat > /var/www/html/web/index.html << EOL
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>React App</title>
-</head>
-<body>
-  <div id="root"></div>
-  <script>
-    // Este archivo será reemplazado por el build de React
-    console.log("Esperando build de React");
-  </script>
-</body>
-</html>
-EOL'
-
-echo "✨ Estado del proyecto React:"
+echo "✨ Estado del proyecto Pro:"
 ddev status
 
 # Mostrar URL y abrir en el navegador al final
