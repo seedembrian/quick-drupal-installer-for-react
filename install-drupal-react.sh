@@ -118,7 +118,7 @@ if [ "$FULL_INSTALL" = true ]; then
 
   # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
   echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
+  ddev drush role-remove-perm content_editor "access toolbar" 2>/dev/null || true
 
   echo "✅ Drupal con React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -161,20 +161,19 @@ if [ "$INSTALL_REACT" = true ]; then
         cp web/themes/custom/theme_react/react-src/vite.config.js web/themes/custom/theme_react/react-src/vite.config.js.bak
         
         # Modificar la configuración de Vite para cambiar el outDir
-        sed -i "s|outDir: \"dist\"|outDir: \"../../../\"|g" web/themes/custom/theme_react/react-src/vite.config.js
-        sed -i "s|outDir: \"./dist\"|outDir: \"../../../\"|g" web/themes/custom/theme_react/react-src/vite.config.js
+        sed -i "s|\(outDir:\s*[\"\']\)\(dist\|\./dist\|\.\)[\"\']"|\1../../../\"|g" web/themes/custom/theme_react/react-src/vite.config.js
         
         # Asegurarse de que emptyOutDir esté en false
         if grep -q "emptyOutDir" web/themes/custom/theme_react/react-src/vite.config.js; then
-          sed -i "s|emptyOutDir: true|emptyOutDir: false|g" web/themes/custom/theme_react/react-src/vite.config.js
+          sed -i "s|emptyOutDir:\s*true|emptyOutDir: false|g" web/themes/custom/theme_react/react-src/vite.config.js
         else
           # Si no existe la propiedad emptyOutDir, añadirla después de outDir
           sed -i "/outDir:/a\    emptyOutDir: false," web/themes/custom/theme_react/react-src/vite.config.js
         fi
         
-        echo "✅ Configuración de Vite modificada correctamente."
+        echo "\u2705 Configuración de Vite modificada correctamente."
       else
-        echo "⚠️ No se encontró el archivo vite.config.js en el repositorio clonado."
+        echo "\u26a0️ No se encontró el archivo vite.config.js en el repositorio clonado."
       fi'
       
       # Construir el proyecto React con la configuración modificada
