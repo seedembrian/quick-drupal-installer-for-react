@@ -98,22 +98,16 @@ if [ -z "$PROJECT_NAME" ]; then
   exit 1
 fi
 
-# La instalación siempre será completa
+# La instalación siempre será completa y con React
 FULL_OPTION="-f"
-echo -e "${GREEN}Se realizará una instalación completa automáticamente${NC}"
+REACT_OPTION="-r"
+echo -e "${GREEN}Se realizará una instalación completa con React automáticamente${NC}"
 
-# Preguntar por tema React
-read -p "¿Desea instalar un tema React? (s/n): " INSTALL_REACT
-REACT_OPTION=""
+# Preguntar por URL del repositorio Git para React
 GIT_OPTION=""
-if [[ "$INSTALL_REACT" =~ ^[Ss]$ ]]; then
-  REACT_OPTION="-r"
-  
-  # Preguntar por URL del repositorio Git
-  read -p "URL del repositorio Git para el tema React (dejar en blanco para omitir): " REACT_REPO
-  if [ -n "$REACT_REPO" ]; then
-    GIT_OPTION="-g $REACT_REPO"
-  fi
+read -p "URL del repositorio Git para el tema React (dejar en blanco para omitir): " REACT_REPO
+if [ -n "$REACT_REPO" ]; then
+  GIT_OPTION="-g $REACT_REPO"
 fi
 
 # Preguntar por opciones avanzadas
@@ -135,7 +129,7 @@ if [[ "$ADVANCED_OPTIONS" =~ ^[Ss]$ ]]; then
     ADMIN_OPTIONS="$ADMIN_OPTIONS -e $ADMIN_EMAIL"
   fi
   
-  read -p "Nombre del sitio (predeterminado: My Drupal CMS Pro): " SITE_NAME
+  read -p "Nombre del sitio (predeterminado: My Drupal CMS React): " SITE_NAME
   if [ -n "$SITE_NAME" ]; then
     ADMIN_OPTIONS="$ADMIN_OPTIONS -n \"$SITE_NAME\""
   fi

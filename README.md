@@ -1,11 +1,12 @@
 # Quick Drupal Installer for React
 
-Una herramienta avanzada para instalar rápidamente Drupal 11 con integración de temas React.
+Una herramienta avanzada para instalar rápidamente Drupal 11 desacoplado con React en la interfaz de usuario.
 
 ## Características
 
 - Instalación rápida de Drupal 11 con DDEV
-- Integración opcional de temas React
+- Instalación automática de React en la interfaz de usuario
+- Estructura desacoplada: Drupal en carpeta `/api` y React en la raíz de `/web`
 - Clonación de repositorios Git de temas React
 - Configuración automática del tema para eliminar estilos de Drupal
 - Soporte para desarrollo con React/Preact
@@ -72,49 +73,66 @@ quick-drupal-react [opciones] nombre-proyecto
 - `-p, --pass CONTRASEÑA`: Contraseña de administrador (predeterminado: admin)
 - `-e, --email EMAIL`: Correo electrónico de administrador (predeterminado: admin@example.com)
 - `-n, --name NOMBRE`: Nombre del sitio (predeterminado: My Drupal CMS React)
-- `-r, --react`: Instalar tema React
 - `-g, --git URL`: URL del repositorio Git para el tema React
 - `-h, --help`: Mostrar ayuda
+
+Nota: React siempre se instala automáticamente, por lo que la opción `-r` ya no es necesaria.
 
 ### Ejemplos
 
 ```bash
-# Instalación básica de Drupal con tema React (preguntará la URL)
-quick-drupal-react -r mi-drupal-react
+# Instalación básica de Drupal con React (preguntará la URL)
+quick-drupal-react mi-drupal-react
 
-# Instalación completa con tema React desde un repositorio específico
-quick-drupal-react -f -r -g https://github.com/user/react-theme.git mi-drupal-react
+# Instalación completa con React desde un repositorio específico
+quick-drupal-react -f -g https://github.com/user/react-theme.git mi-drupal-react
 
-# Instalación completa con opciones personalizadas y tema React
-quick-drupal-react -f -u admin -p secreto -e admin@example.com -n "Mi sitio React" -r mi-drupal-react
+# Instalación completa con opciones personalizadas
+quick-drupal-react -f -u admin -p secreto -e admin@example.com -n "Mi sitio React" mi-drupal-react
 ```
 
-## Estructura del tema React
+## Estructura del proyecto
 
-El tema React se instalará en `web/themes/custom/theme_react/` con la siguiente estructura:
+El proyecto se instalará con la siguiente estructura:
 
 ```
-theme_react/
-├── react-src/           # Código fuente de React (clonado o creado)
-│   └── dist/            # Archivos compilados (generados por npm run build)
-│       └── assets/      # Archivos JS y CSS con hash
-├── templates/           # Plantillas Twig de Drupal
-│   ├── html.html.twig   # Plantilla HTML principal
-│   └── page.html.twig   # Plantilla de página con div #app
-├── theme_react.info.yml # Configuración del tema
-├── theme_react.libraries.yml # Definición de bibliotecas
-└── theme_react.theme    # Hooks de PHP para integración
+proyecto/
+├─ web/                # Raíz del sitio web
+│   ├─ api/            # Backend de Drupal (movido a subcarpeta)
+│   │   ├─ core/        # Núcleo de Drupal
+│   │   ├─ modules/     # Módulos de Drupal
+│   │   ├─ themes/      # Temas de Drupal
+│   │   │   └─ custom/theme_react/  # Tema React
+│   │   │       ├─ react-src/  # Código fuente de React
+│   │   │       ├─ templates/  # Plantillas Twig
+│   │   │       ├─ theme_react.info.yml
+│   │   │       ├─ theme_react.libraries.yml
+│   │   │       └─ theme_react.theme
+│   │   └─ index.php    # Punto de entrada de Drupal
+│   ├─ index.html     # Punto de entrada de React
+│   ├─ assets/        # Archivos compilados de React (JS/CSS)
+│   └─ .htaccess      # Configuración para redireccionar API y SPA
+├─ vendor/            # Dependencias de Composer
+└─ composer.json      # Configuración de Composer
 ```
 
 ## Desarrollo
 
-Para trabajar con el tema React después de la instalación:
+Para trabajar con el proyecto después de la instalación:
 
-1. Navega a la carpeta del tema React: `cd web/themes/custom/theme_react/react-src`
+### Frontend (React)
+
+1. Navega a la carpeta del código fuente de React: `cd web/api/themes/custom/theme_react/react-src`
 2. Instala dependencias si es necesario: `npm install`
 3. Ejecuta el servidor de desarrollo: `npm run dev`
 4. Compila para producción: `npm run build`
-5. Limpia la caché de Drupal: `ddev drush cr`
+   - Los archivos compilados se ubicarán en la raíz de `/web`
+
+### Backend (Drupal)
+
+1. Accede a la administración de Drupal en: `https://tu-proyecto.ddev.site/api/user/login`
+2. Limpia la caché de Drupal: `ddev drush cr`
+3. Para trabajar con la API, usa la ruta base: `/api`
 
 ## Desinstalación
 
