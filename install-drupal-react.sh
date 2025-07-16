@@ -17,13 +17,13 @@ show_help() {
 }
 
 # Default variables
-PROJECT_NAME="drupalcms-react"
+PROJECT_NAME="drupal-react-app"
 FULL_INSTALL=false
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 ADMIN_EMAIL="admin@example.com"
-SITE_NAME="My Drupal CMS React"
-INSTALL_REACT=true
+SITE_NAME="My Drupal React App"
+INSTALL_REACT=false
 REACT_REPO=""
 
 # Read arguments
@@ -97,18 +97,18 @@ mkdir "$PROJECT_NAME"
 cd "$PROJECT_NAME" || exit 1
 
 # Configure and start DDEV
-echo "⚙️ Configurando DDEV React..."
+echo "⚙️ Configurando DDEV para Drupal con React..."
 ddev config --project-type=drupal11 --docroot=web --project-name="$PROJECT_NAME" || exit 1
 
-echo "🚀 Iniciando DDEV React..."
+echo "🚀 Iniciando DDEV para Drupal con React..."
 ddev start || exit 1
 
 # Download Drupal CMS
-echo "📦 Descargando Drupal CMS React..."
+echo "📦 Descargando Drupal para integración con React..."
 ddev composer create drupal/cms || exit 1
 
 if [ "$FULL_INSTALL" = true ]; then
-  echo "⚙️ Instalando Drupal CMS React, por favor espere..."
+  echo "⚙️ Instalando Drupal con React, por favor espere..."
   ddev drush site:install "$PROFILE" \
     --account-name="$ADMIN_USER" \
     --account-pass="$ADMIN_PASS" \
@@ -116,99 +116,24 @@ if [ "$FULL_INSTALL" = true ]; then
     --site-name="$SITE_NAME" \
     --yes
 
-  # Ya no intentamos modificar permisos que podrían no existir
-  echo "🔧 Configurando permisos..."
-  # Simplemente limpiar la caché de Drupal
-  ddev drush cr 2>/dev/null || true
+  # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
+  echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
+  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
 
-  echo "✅ Drupal CMS React instalado."
+  echo "✅ Drupal con React instalado."
   echo "👤 Usuario: $ADMIN_USER"
   echo "🔑 Contraseña: $ADMIN_PASS"
 else
-  echo "📦 Proyecto Drupal React creado."
+  echo "📦 Proyecto Drupal con React creado."
 fi
-
-# Mover Drupal a la carpeta /api dentro de /web
-echo "📦 Preparando estructura para Drupal en /api..."
-
-# Crear la estructura de directorios
-ddev exec mkdir -p /var/www/html/web/api
-
-# Copiar solo los archivos esenciales a la carpeta api
-echo "📦 Copiando archivos esenciales de Drupal a /api..."
-
-# Usar un enfoque más seguro para copiar archivos, verificando primero si existen
-ddev exec bash -c 'for dir in core modules profiles sites themes; do
-  if [ -d "/var/www/html/web/$dir" ]; then
-    echo "Copiando $dir..."
-    cp -r "/var/www/html/web/$dir" "/var/www/html/web/api/"
-  fi
-done'
-
-# Copiar vendor si existe (puede estar en una ubicación diferente)
-ddev exec bash -c 'if [ -d "/var/www/html/vendor" ]; then
-  echo "Copiando vendor desde /var/www/html/vendor..."
-  cp -r "/var/www/html/vendor" "/var/www/html/web/api/"
-elif [ -d "/var/www/html/web/vendor" ]; then
-  echo "Copiando vendor desde /var/www/html/web/vendor..."
-  cp -r "/var/www/html/web/vendor" "/var/www/html/web/api/"
-fi'
-
-# Copiar archivos individuales si existen
-ddev exec bash -c 'for file in .htaccess index.php autoload.php robots.txt; do
-  if [ -f "/var/www/html/web/$file" ]; then
-    echo "Copiando $file..."
-    cp "/var/www/html/web/$file" "/var/www/html/web/api/"
-  fi
-done'
-
-# Actualizar settings.php para las nuevas rutas
-echo "🔧 Actualizando configuración de Drupal para /api..."
-ddev exec bash -c 'if [ -f /var/www/html/web/api/sites/default/settings.php ]; then
-  # Hacer backup del archivo original
-  cp /var/www/html/web/api/sites/default/settings.php /var/www/html/web/api/sites/default/settings.php.bak
-  
-  # Actualizar rutas
-  sed -i "s|\$settings\[\"file_public_path\"\] = \"sites/default/files\"|\$settings\[\"file_public_path\"\] = \"api/sites/default/files\"|g" /var/www/html/web/api/sites/default/settings.php
-  
-  # Añadir configuración de base_path
-  echo "# Configuración para sitio en subcarpeta /api" >> /var/www/html/web/api/sites/default/settings.php
-  echo "\$base_url = \"https://\" . (isset(\$_SERVER[\"HTTP_HOST\"]) ? \$_SERVER[\"HTTP_HOST\"] : \"localhost\") . \"/api\";" >> /var/www/html/web/api/sites/default/settings.php
-fi'
-
-# Actualizar el archivo index.php en la carpeta api para corregir rutas
-echo "🔧 Actualizando index.php en la carpeta /api..."
-ddev exec bash -c 'if [ -f /var/www/html/web/api/index.php ]; then
-  # Modificar el index.php para usar la ruta correcta a autoload.php
-  sed -i "s|require_once \"\.\./autoload\.php\"|require_once \"autoload.php\"|g" /var/www/html/web/api/index.php
-  sed -i "s|\$autoloader = require_once \"\.\./autoload\.php\"|\$autoloader = require_once \"autoload.php\"|g" /var/www/html/web/api/index.php
-fi'
-
-# Crear un nuevo index.php en la raíz que redirija a /api
-echo "📝 Creando archivo index.php en la raíz para redireccionar a /api..."
-ddev exec bash -c 'cat > /var/www/html/web/index.php << EOL
-<?php
-// Archivo temporal de redirección
-header("Location: /api");
-exit;
-EOL'
-
-# Limpiar la caché de Drupal para aplicar los cambios
-echo "🔧 Limpiando caché de Drupal..."
-ddev drush -r /var/www/html/web/api cr 2>/dev/null || true
 
 # Instalar tema React si se solicitó
 if [ "$INSTALL_REACT" = true ]; then
   echo "🎨 Configurando el tema React..."
   
-  # Verificar si existe la carpeta themes en api, si no, crearla
-  ddev exec bash -c 'if [ ! -d "/var/www/html/web/api/themes" ]; then
-    mkdir -p /var/www/html/web/api/themes
-  fi'
-  
-  # Crear directorios necesarios con verificación de permisos
-  ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/templates
-  ddev exec mkdir -p /var/www/html/web/api/themes/custom/theme_react/react-src
+  # Crear directorios necesarios
+  ddev exec mkdir -p web/themes/custom/theme_react/templates
+  ddev exec mkdir -p web/themes/custom/theme_react/react-src
   
   # Si no se proporcionó una URL de repositorio, preguntar al usuario
   if [ -z "$REACT_REPO" ]; then
@@ -222,21 +147,44 @@ if [ "$INSTALL_REACT" = true ]; then
   # Clonar el repositorio si se proporcionó una URL
   if [ -n "$REACT_REPO" ]; then
     echo "📦 Clonando repositorio React desde $REACT_REPO..."
-    ddev exec git clone "$REACT_REPO" web/api/themes/custom/theme_react/react-src
+    ddev exec git clone "$REACT_REPO" web/themes/custom/theme_react/react-src
     
     # Instalar dependencias si existe package.json
-    if ddev exec test -f web/api/themes/custom/theme_react/react-src/package.json; then
+    if ddev exec test -f web/themes/custom/theme_react/react-src/package.json; then
       echo "📦 Instalando dependencias de Node.js..."
-      ddev exec -d /var/www/html/web/api/themes/custom/theme_react/react-src npm install
+      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
       
-      # Construir el proyecto React
+      # Modificar la configuración de Vite existente para que el build se haga en la raíz de la carpeta web
+      echo "📝 Modificando la configuración de Vite para build en la raíz de la carpeta web..."
+      ddev exec bash -c 'if [ -f web/themes/custom/theme_react/react-src/vite.config.js ]; then
+        # Hacer backup del archivo original
+        cp web/themes/custom/theme_react/react-src/vite.config.js web/themes/custom/theme_react/react-src/vite.config.js.bak
+        
+        # Modificar la configuración de Vite para cambiar el outDir
+        sed -i "s|outDir: \"dist\"|outDir: \"../../../\"|g" web/themes/custom/theme_react/react-src/vite.config.js
+        sed -i "s|outDir: \"./dist\"|outDir: \"../../../\"|g" web/themes/custom/theme_react/react-src/vite.config.js
+        
+        # Asegurarse de que emptyOutDir esté en false
+        if grep -q "emptyOutDir" web/themes/custom/theme_react/react-src/vite.config.js; then
+          sed -i "s|emptyOutDir: true|emptyOutDir: false|g" web/themes/custom/theme_react/react-src/vite.config.js
+        else
+          # Si no existe la propiedad emptyOutDir, añadirla después de outDir
+          sed -i "/outDir:/a\    emptyOutDir: false," web/themes/custom/theme_react/react-src/vite.config.js
+        fi
+        
+        echo "✅ Configuración de Vite modificada correctamente."
+      else
+        echo "⚠️ No se encontró el archivo vite.config.js en el repositorio clonado."
+      fi'
+      
+      # Construir el proyecto React con la configuración modificada
       echo "🔨 Construyendo el proyecto React..."
-      ddev exec -d /var/www/html/web/api/themes/custom/theme_react/react-src npm run build
+      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
     fi
   fi
     
     # Crear theme_react.info.yml
-    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.info.yml << EOL
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.info.yml << EOL
 name: Theme React
 type: theme
 description: "Tema personalizado con integración de React"
@@ -250,7 +198,7 @@ regions:
 EOL'
     
     # Crear theme_react.libraries.yml
-    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.libraries.yml << EOL
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.libraries.yml << EOL
 global:
   version: VERSION
   js:
@@ -261,11 +209,11 @@ EOL'
     
     # Crear un archivo theme_react.theme vacío
     echo "📝 Creando archivo theme_react.theme vacío..."
-    ddev exec bash -c 'touch web/api/themes/custom/theme_react/theme_react.theme'
+    ddev exec bash -c 'touch web/themes/custom/theme_react/theme_react.theme'
     
     # Añadir el código PHP al archivo theme_react.theme
     echo "📝 Añadiendo código al archivo theme_react.theme..."
-    ddev exec bash -c 'cat > web/api/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
 <?php
 
 /**
@@ -279,7 +227,7 @@ EOL'
 function theme_react_page_attachments_alter(array &\$attachments) {
   // Obtener la ruta base del tema
   \$theme_path = \Drupal::service("extension.list.theme")->getPath("theme_react");
-  \$dist_path = \$theme_path . "/react-src/dist/assets";
+  \$dist_path = \$theme_path . "/../../assets";
   
   // Buscar archivos CSS y JS en la carpeta dist/assets
   if (is_dir(DRUPAL_ROOT . "/" . \$dist_path)) {
@@ -380,7 +328,7 @@ EOFTHEME'
 EOL'
     
     # Crear page.html.twig
-    ddev exec bash -c 'cat > /var/www/html/web/api/themes/custom/theme_react/templates/page.html.twig << EOL
+    ddev exec bash -c 'cat > web/themes/custom/theme_react/templates/page.html.twig << EOL
 {#
 /**
  * @file
@@ -390,30 +338,21 @@ EOL'
 <div id="root"></div>
 EOL'
   
-  # Activar el tema React
-  echo "🔧 Activando el tema React..."
-  ddev drush -r /var/www/html/web/api theme:enable theme_react 2>/dev/null || echo "Error al activar el tema. Continuando de todos modos..."
-  
-  # Reconstruir caché para asegurar que el tema sea reconocido
-  ddev drush -r /var/www/html/web/api cr
-  
-  # Configurar el tema como predeterminado
-  ddev drush -r /var/www/html/web/api config-set system.theme default theme_react -y 2>/dev/null || echo "Error al configurar el tema por defecto. Continuando de todos modos..."
-  
-  # Limpiar caché final
-  ddev drush -r /var/www/html/web/api cr
+  # Activar el tema
+  echo "🔌 Activando el tema React..."
+  ddev drush theme:enable theme_react
+  ddev drush config-set system.theme default theme_react -y
+  ddev drush cr
   
   echo "✅ Tema React instalado y activado correctamente."
-  echo "📝 Para trabajar con el tema React, edite los archivos en web/api/themes/custom/theme_react/"
-  echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/api/themes/custom/theme_react/react-src/"
+  echo "📝 Para trabajar con el tema React, edite los archivos en web/themes/custom/theme_react/"
+  echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/themes/custom/theme_react/react-src/"
 fi
 
-echo "✨ Estado del proyecto React:"
+echo "✨ Estado del proyecto Drupal con React:"
 ddev status
 
 # Mostrar URL y abrir en el navegador al final
-echo " URL del sitio: $(ddev describe -j | grep -oP '"https_url"\s*:\s*"\K[^"]+')"  
-echo " Abriendo el sitio en su navegador..."
 echo "🌐 URL del sitio: $(ddev describe -j | grep -oP '"https_url"\s*:\s*"\K[^"]+')"  
 echo "🌐 Abriendo el sitio en su navegador..."
 
