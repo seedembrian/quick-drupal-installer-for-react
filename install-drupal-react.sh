@@ -118,7 +118,7 @@ if [ "$FULL_INSTALL" = true ]; then
 
   # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
   echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
+  ddev drush role:perm:remove content_editor "access toolbar" 2>/dev/null || true
 
   echo "✅ Drupal CMS con React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -157,7 +157,7 @@ if [ "$INSTALL_REACT" = true ]; then
       # Construir el proyecto React directamente en la carpeta raíz de Drupal web
       echo "🔨 Construyendo el proyecto React en la carpeta raíz de Drupal..."
       # Primero verificamos si existe un archivo vite.config.js o similar para modificarlo
-      if ddev exec test -f web/themes/custom/theme_react/react-src/vite.config.js; then
+      if ddev exec bash -c "[ -f web/themes/custom/theme_react/react-src/vite.config.js ]"; then
         echo "📝 Modificando configuración de Vite para build en carpeta raíz..."
         # Crear un archivo temporal con la nueva configuración
         ddev exec bash -c 'cat > web/themes/custom/theme_react/react-src/vite.config.js.new << "EOFVITE"
@@ -186,7 +186,7 @@ export default defineConfig({
 EOFVITE'
         # Reemplazar el archivo original con el nuevo
         ddev exec mv web/themes/custom/theme_react/react-src/vite.config.js.new web/themes/custom/theme_react/react-src/vite.config.js
-      elif ddev exec test -f web/themes/custom/theme_react/react-src/webpack.config.js; then
+      elif ddev exec bash -c "[ -f web/themes/custom/theme_react/react-src/webpack.config.js ]"; then
         echo "📝 Modificando configuración de Webpack para build en carpeta raíz..."
         # Crear un archivo temporal con la nueva configuración para webpack
         ddev exec bash -c 'cat > web/themes/custom/theme_react/react-src/webpack.config.js.new << "EOFWEBPACK"
@@ -255,23 +255,23 @@ EOL'
  */
 function theme_react_page_attachments_alter(array &\$attachments) {
   // Buscar archivos CSS y JS tanto en la carpeta raíz como en assets
-  $assets_paths = [
+  \$assets_paths = [
     'assets', // Carpeta assets en la raíz
     'web/assets', // Alternativa si se construye en web/assets
   ];
   
-  foreach ($assets_paths as $assets_path) {
+  foreach (\$assets_paths as \$assets_path) {
     // Verificar si la carpeta existe
-    if (is_dir(DRUPAL_ROOT . '/' . $assets_path)) {
-      $files = scandir(DRUPAL_ROOT . '/' . $assets_path);
+    if (is_dir(DRUPAL_ROOT . '/' . \$assets_path)) {
+      \$files = scandir(DRUPAL_ROOT . '/' . \$assets_path);
     
     foreach (\$files as \$file) {
       // Ignorar directorios y archivos ocultos
-      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . $assets_path . "/" . \$file)) {
+      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$assets_path . "/" . \$file)) {
         continue;
       }
       
-      \$file_path = "/" . $assets_path . "/" . \$file;
+      \$file_path = "/" . \$assets_path . "/" . \$file;
       
       // Añadir archivos CSS
       if (preg_match("/\\.css\$/", \$file)) {
