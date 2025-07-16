@@ -118,7 +118,7 @@ if [ "$FULL_INSTALL" = true ]; then
 
   # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
   echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
+  ddev drush role:perm:remove content_editor "access toolbar" 2>/dev/null || true
 
   echo "✅ Drupal CMS React instalado."
   echo "👤 Usuario: $ADMIN_USER"
@@ -153,6 +153,19 @@ fi'
 ddev exec bash -c 'if [ -f /var/www/html/web/.htaccess ]; then
   cp /var/www/html/web/.htaccess /var/www/html/web/api/
 fi'
+
+# Eliminar los archivos de Drupal de la raíz de /web (excepto la carpeta api y el archivo index.php)
+echo "🗑️ Eliminando archivos de Drupal de la raíz de /web..."
+ddev exec bash -c 'cd /var/www/html/web && find . -maxdepth 1 -not -path "./api" -not -path "." -not -name "index.php" -exec rm -rf {} \;'
+
+# Crear un nuevo index.php en la raíz que redirija a /api
+echo "📝 Creando archivo index.php en la raíz para redireccionar a /api..."
+ddev exec bash -c 'cat > /var/www/html/web/index.php << EOL
+<?php
+// Archivo temporal de redirección
+header("Location: /api");
+exit;
+EOL'
 
 # Instalar tema React si se solicitó
 if [ "$INSTALL_REACT" = true ]; then
