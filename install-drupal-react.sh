@@ -10,8 +10,6 @@ show_help() {
   echo "  -p, --pass PASS     Admin password (default: admin)"
   echo "  -e, --email EMAIL   Admin email (default: admin@example.com)"
   echo "  -n, --name NAME     Site name (default: My Drupal CMS Pro)"
-  echo "  -r, --react         Install React theme"
-  echo "  -g, --git URL       Git repository URL for React theme"
   echo "  -h, --help          Show this help"
   exit 0
 }
@@ -23,8 +21,6 @@ ADMIN_USER="admin"
 ADMIN_PASS="admin"
 ADMIN_EMAIL="admin@example.com"
 SITE_NAME="My Drupal CMS Pro"
-INSTALL_REACT=false
-REACT_REPO=""
 
 # Read arguments
 while [[ $# -gt 0 ]]; do
@@ -47,15 +43,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --name|-n)
       SITE_NAME="$2"
-      shift 2
-      ;;
-    --react|-r)
-      INSTALL_REACT=true
-      shift
-      ;;
-    --git|-g)
-      REACT_REPO="$2"
-      INSTALL_REACT=true
       shift 2
       ;;
     --help|-h)
@@ -116,214 +103,11 @@ if [ "$FULL_INSTALL" = true ]; then
     --site-name="$SITE_NAME" \
     --yes
 
-  # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
-  echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
-
   echo "✅ Drupal CMS Pro instalado."
   echo "👤 Usuario: $ADMIN_USER"
   echo "🔑 Contraseña: $ADMIN_PASS"
 else
   echo "📦 Proyecto Drupal Pro creado."
-fi
-
-# Instalar tema React si se solicitó
-if [ "$INSTALL_REACT" = true ]; then
-  echo "🎨 Configurando el tema React Pro..."
-  
-  # Crear directorios necesarios
-  ddev exec mkdir -p web/themes/custom/theme_react/templates
-  ddev exec mkdir -p web/themes/custom/theme_react/react-src
-  
-  # Si no se proporcionó una URL de repositorio, preguntar al usuario
-  if [ -z "$REACT_REPO" ]; then
-    echo "📝 Ingrese la URL del repositorio Git para el tema React (o presione Enter para omitir):"
-    read -r REACT_REPO
-  fi
-  
-  # Crear archivos básicos para el tema React (siempre, independientemente del repositorio)
-  echo "📝 Creando archivos básicos para el tema React Pro..."
-  
-  # Clonar el repositorio si se proporcionó una URL
-  if [ -n "$REACT_REPO" ]; then
-    echo "📦 Clonando repositorio React desde $REACT_REPO..."
-    ddev exec git clone "$REACT_REPO" web/themes/custom/theme_react/react-src
-    
-    # Instalar dependencias si existe package.json
-    if ddev exec test -f web/themes/custom/theme_react/react-src/package.json; then
-      echo "📦 Instalando dependencias de Node.js..."
-      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
-      
-      # Construir el proyecto React
-      echo "🔨 Construyendo el proyecto React..."
-      ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
-    fi
-  fi
-    
-    # Crear theme_react.info.yml
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.info.yml << EOL
-name: Theme React Pro
-type: theme
-description: "Tema personalizado con integración de React"
-core_version_requirement: ^11
-base theme: olivero
-
-regions:
-  header: "Header"
-  content: "Content"
-  footer: "Footer"
-EOL'
-    
-    # Crear theme_react.libraries.yml
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.libraries.yml << EOL
-global:
-  version: VERSION
-  js:
-    # Los archivos JS se cargan dinámicamente desde el hook
-  css:
-    # Los archivos CSS se cargan dinámicamente desde el hook
-EOL'
-    
-    # Crear un archivo theme_react.theme vacío
-    echo "📝 Creando archivo theme_react.theme vacío..."
-    ddev exec bash -c 'touch web/themes/custom/theme_react/theme_react.theme'
-    
-    # Añadir el código PHP al archivo theme_react.theme
-    echo "📝 Añadiendo código al archivo theme_react.theme..."
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.theme << "EOFTHEME"
-<?php
-
-/**
- * @file
- * Functions to support theming in the Theme React theme.
- */
-
-/**
- * Implements hook_page_attachments_alter().
- */
-function theme_react_page_attachments_alter(array &\$attachments) {
-  // Obtener la ruta base del tema
-  \$theme_path = \Drupal::service("extension.list.theme")->getPath("theme_react");
-  \$dist_path = \$theme_path . "/react-src/dist/assets";
-  
-  // Buscar archivos CSS y JS en la carpeta dist/assets
-  if (is_dir(DRUPAL_ROOT . "/" . \$dist_path)) {
-    \$files = scandir(DRUPAL_ROOT . "/" . \$dist_path);
-    
-    foreach (\$files as \$file) {
-      // Ignorar directorios y archivos ocultos
-      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$dist_path . "/" . \$file)) {
-        continue;
-      }
-      
-      \$file_path = "/" . \$dist_path . "/" . \$file;
-      
-      // Añadir archivos CSS
-      if (preg_match("/\\.css\$/", \$file)) {
-        \$attachments["#attached"]["html_head"][] = [
-          [
-            "#type" => "html_tag",
-            "#tag" => "link",
-            "#attributes" => [
-              "rel" => "stylesheet",
-              "href" => \$file_path,
-            ],
-          ],
-          "theme_react_css_" . md5(\$file),
-        ];
-      }
-      
-      // Añadir archivos JS
-      if (preg_match("/\\.js\$/", \$file)) {
-        \$attachments["#attached"]["html_head"][] = [
-          [
-            "#type" => "html_tag",
-            "#tag" => "script",
-            "#attributes" => [
-              "src" => \$file_path,
-              "type" => "module",
-              "defer" => TRUE,
-            ],
-          ],
-          "theme_react_js_" . md5(\$file),
-        ];
-      }
-    }
-  }
-  
-  // Añadir CSS para manejar el div dialog-off-canvas-main-canvas
-  \$attachments["#attached"]["html_head"][] = [
-    [
-      "#type" => "html_tag",
-      "#tag" => "style",
-      "#value" => "
-        /* Hacer que el wrapper dialog-off-canvas-main-canvas se comporte como un contenedor transparente */
-        .dialog-off-canvas-main-canvas {
-          display: contents !important;
-        }
-      ",
-    ],
-    "theme_react_dialog_fix",
-  ];
-}
-EOFTHEME'
-    
-    # Verificar si la creación fue exitosa
-    if ddev exec test -f web/themes/custom/theme_react/theme_react.theme; then
-        echo "✅ Archivo theme_react.theme creado correctamente."
-    else
-        echo "❌ Error: No se pudo crear el archivo theme_react.theme."
-    fi
-    
-    # Eliminar el archivo theme_react.theme.test si existe
-    ddev exec bash -c 'rm -f web/themes/custom/theme_react/theme_react.theme.test 2>/dev/null || true'
-    
-    # Crear html.html.twig
-    ddev exec mkdir -p web/themes/custom/theme_react/templates
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/templates/html.html.twig << EOL
-{#
-/**
- * @file
- * Theme override for the basic structure of a single Drupal page.
- */
-#}
-<!DOCTYPE html>
-<html{{ html_attributes }}>
-  <head>
-    <head-placeholder token="{{ placeholder_token }}">
-    <title>{{ head_title|safe_join(" | ") }}</title>
-    <css-placeholder token="{{ placeholder_token }}">
-    <js-placeholder token="{{ placeholder_token }}">
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  </head>
-  <body{{ attributes }}>
-    {{ page }}
-    {# <js-bottom-placeholder token="{{ placeholder_token }}"> #}
-  </body>
-</html>
-EOL'
-    
-    # Crear page.html.twig
-    ddev exec bash -c 'cat > web/themes/custom/theme_react/templates/page.html.twig << EOL
-{#
-/**
- * @file
- * Theme override to display a single page.
- */
-#}
-<div id="root"></div>
-EOL'
-  
-  # Activar el tema
-  echo "🔌 Activando el tema React Pro..."
-  ddev drush theme:enable theme_react
-  ddev drush config-set system.theme default theme_react -y
-  ddev drush cr
-  
-  echo "✅ Tema React Pro instalado y activado correctamente."
-  echo "📝 Para trabajar con el tema React, edite los archivos en web/themes/custom/theme_react/"
-  echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/themes/custom/theme_react/react-src/"
 fi
 
 echo "✨ Estado del proyecto Pro:"
