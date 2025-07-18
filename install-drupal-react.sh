@@ -9,7 +9,7 @@ show_help() {
   echo "  -u, --user USER     Admin username (default: admin)"
   echo "  -p, --pass PASS     Admin password (default: admin)"
   echo "  -e, --email EMAIL   Admin email (default: admin@example.com)"
-  echo "  -n, --name NAME     Site name (default: My Drupal React Site)"
+  echo "  -n, --name NAME     Site name (default: My Drupal CMS Pro)"
   echo "  -r, --react         Install React theme"
   echo "  -g, --git URL       Git repository URL for React theme"
   echo "  -h, --help          Show this help"
@@ -17,12 +17,12 @@ show_help() {
 }
 
 # Default variables
-PROJECT_NAME="drupal-react"
+PROJECT_NAME="drupalcms-pro"
 FULL_INSTALL=false
 ADMIN_USER="admin"
 ADMIN_PASS="admin"
 ADMIN_EMAIL="admin@example.com"
-SITE_NAME="My Drupal React Site"
+SITE_NAME="My Drupal CMS Pro"
 INSTALL_REACT=false
 REACT_REPO=""
 
@@ -97,18 +97,18 @@ mkdir "$PROJECT_NAME"
 cd "$PROJECT_NAME" || exit 1
 
 # Configure and start DDEV
-echo "⚙️ Configurando DDEV..."
+echo "⚙️ Configurando DDEV Pro..."
 ddev config --project-type=drupal11 --docroot=web --project-name="$PROJECT_NAME" || exit 1
 
-echo "🚀 Iniciando DDEV..."
+echo "🚀 Iniciando DDEV Pro..."
 ddev start || exit 1
 
 # Download Drupal CMS
-echo "📦 Descargando Drupal CMS..."
+echo "📦 Descargando Drupal CMS Pro..."
 ddev composer create drupal/cms || exit 1
 
 if [ "$FULL_INSTALL" = true ]; then
-  echo "⚙️ Instalando Drupal CMS, por favor espere..."
+  echo "⚙️ Instalando Drupal CMS Pro, por favor espere..."
   ddev drush site:install "$PROFILE" \
     --account-name="$ADMIN_USER" \
     --account-pass="$ADMIN_PASS" \
@@ -118,18 +118,18 @@ if [ "$FULL_INSTALL" = true ]; then
 
   # Corregir el error de permiso 'access toolbar' para el rol 'content editor'
   echo "🔧 Corrigiendo permisos para el rol 'content editor'..."
-  ddev drush role:perm:remove content_editor "access toolbar" 2>/dev/null || true
+  ddev drush role:remove-permission content_editor "access toolbar" 2>/dev/null || true
 
-  echo "✅ Drupal CMS con React instalado."
+  echo "✅ Drupal CMS Pro instalado."
   echo "👤 Usuario: $ADMIN_USER"
   echo "🔑 Contraseña: $ADMIN_PASS"
 else
-  echo "📦 Proyecto Drupal React creado."
+  echo "📦 Proyecto Drupal Pro creado."
 fi
 
 # Instalar tema React si se solicitó
 if [ "$INSTALL_REACT" = true ]; then
-  echo "🎨 Configurando el tema React..."
+  echo "🎨 Configurando el tema React Pro..."
   
   # Crear directorios necesarios
   ddev exec mkdir -p web/themes/custom/theme_react/templates
@@ -142,7 +142,7 @@ if [ "$INSTALL_REACT" = true ]; then
   fi
   
   # Crear archivos básicos para el tema React (siempre, independientemente del repositorio)
-  echo "📝 Creando archivos básicos para el tema React..."
+  echo "📝 Creando archivos básicos para el tema React Pro..."
   
   # Clonar el repositorio si se proporcionó una URL
   if [ -n "$REACT_REPO" ]; then
@@ -154,67 +154,15 @@ if [ "$INSTALL_REACT" = true ]; then
       echo "📦 Instalando dependencias de Node.js..."
       ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm install
       
-      # Construir el proyecto React directamente en la carpeta raíz de Drupal web
-      echo "🔨 Construyendo el proyecto React en la carpeta raíz de Drupal..."
-      # Primero verificamos si existe un archivo vite.config.js o similar para modificarlo
-      if ddev exec bash -c "[ -f web/themes/custom/theme_react/react-src/vite.config.js ]"; then
-        echo "📝 Modificando configuración de Vite para build en carpeta raíz..."
-        # Crear un archivo temporal con la nueva configuración
-        ddev exec bash -c 'cat > web/themes/custom/theme_react/react-src/vite.config.js.new << "EOFVITE"
-// Configuración modificada para build en carpeta raíz de Drupal
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-
-// https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [react()],
-  build: {
-    // Construir directamente en la carpeta raíz de Drupal
-    outDir: "../../../..",
-    emptyOutDir: false,
-    rollupOptions: {
-      output: {
-        entryFileNames: "assets/[name]-[hash].js",
-        chunkFileNames: "assets/[name]-[hash].js",
-        assetFileNames: "assets/[name]-[hash].[ext]"
-      }
-    }
-  },
-  base: "/"
-});
-EOFVITE'
-        # Reemplazar el archivo original con el nuevo
-        ddev exec mv web/themes/custom/theme_react/react-src/vite.config.js.new web/themes/custom/theme_react/react-src/vite.config.js
-      elif ddev exec bash -c "[ -f web/themes/custom/theme_react/react-src/webpack.config.js ]"; then
-        echo "📝 Modificando configuración de Webpack para build en carpeta raíz..."
-        # Crear un archivo temporal con la nueva configuración para webpack
-        ddev exec bash -c 'cat > web/themes/custom/theme_react/react-src/webpack.config.js.new << "EOFWEBPACK"
-// Configuración modificada para build en carpeta raíz de Drupal
-const path = require("path");
-
-module.exports = {
-  // Configuración existente...
-  output: {
-    path: path.resolve(__dirname, "../../../.."),
-    filename: "assets/[name]-[contenthash].js",
-    publicPath: "/",
-    clean: false
-  },
-  // Resto de la configuración...
-};
-EOFWEBPACK'
-        echo "⚠️ NOTA: La configuración de Webpack es genérica y puede requerir ajustes manuales."
-      fi
-      
-      # Ejecutar el build
+      # Construir el proyecto React
+      echo "🔨 Construyendo el proyecto React..."
       ddev exec -d /var/www/html/web/themes/custom/theme_react/react-src npm run build
     fi
   fi
     
     # Crear theme_react.info.yml
     ddev exec bash -c 'cat > web/themes/custom/theme_react/theme_react.info.yml << EOL
-name: Theme React
+name: Theme React Pro
 type: theme
 description: "Tema personalizado con integración de React"
 core_version_requirement: ^11
@@ -254,24 +202,21 @@ EOL'
  * Implements hook_page_attachments_alter().
  */
 function theme_react_page_attachments_alter(array &\$attachments) {
-  // Buscar archivos CSS y JS tanto en la carpeta raíz como en assets
-  \$assets_paths = [
-    'assets', // Carpeta assets en la raíz
-    'web/assets', // Alternativa si se construye en web/assets
-  ];
+  // Obtener la ruta base del tema
+  \$theme_path = \Drupal::service("extension.list.theme")->getPath("theme_react");
+  \$dist_path = \$theme_path . "/react-src/dist/assets";
   
-  foreach (\$assets_paths as \$assets_path) {
-    // Verificar si la carpeta existe
-    if (is_dir(DRUPAL_ROOT . '/' . \$assets_path)) {
-      \$files = scandir(DRUPAL_ROOT . '/' . \$assets_path);
+  // Buscar archivos CSS y JS en la carpeta dist/assets
+  if (is_dir(DRUPAL_ROOT . "/" . \$dist_path)) {
+    \$files = scandir(DRUPAL_ROOT . "/" . \$dist_path);
     
     foreach (\$files as \$file) {
       // Ignorar directorios y archivos ocultos
-      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$assets_path . "/" . \$file)) {
+      if (\$file === "." || \$file === ".." || is_dir(DRUPAL_ROOT . "/" . \$dist_path . "/" . \$file)) {
         continue;
       }
       
-      \$file_path = "/" . \$assets_path . "/" . \$file;
+      \$file_path = "/" . \$dist_path . "/" . \$file;
       
       // Añadir archivos CSS
       if (preg_match("/\\.css\$/", \$file)) {
@@ -304,7 +249,6 @@ function theme_react_page_attachments_alter(array &\$attachments) {
         ];
       }
     }
-  }
   }
   
   // Añadir CSS para manejar el div dialog-off-canvas-main-canvas
@@ -372,17 +316,17 @@ EOL'
 EOL'
   
   # Activar el tema
-  echo "🔌 Activando el tema React..."
+  echo "🔌 Activando el tema React Pro..."
   ddev drush theme:enable theme_react
   ddev drush config-set system.theme default theme_react -y
   ddev drush cr
   
-  echo "✅ Tema React instalado y activado correctamente."
+  echo "✅ Tema React Pro instalado y activado correctamente."
   echo "📝 Para trabajar con el tema React, edite los archivos en web/themes/custom/theme_react/"
   echo "🔨 Para compilar el tema React, ejecute 'npm run build' en web/themes/custom/theme_react/react-src/"
 fi
 
-echo "✨ Estado del proyecto:"
+echo "✨ Estado del proyecto Pro:"
 ddev status
 
 # Mostrar URL y abrir en el navegador al final
